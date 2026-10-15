@@ -11,8 +11,9 @@ permissions:
 
 jobs:
   linux-x86_64:
-    # The oldest supported runner: the binary then runs on any glibc since 2.35.
-    runs-on: ubuntu-22.04
+    # The prebuilt ONNX Runtime needs glibc 2.38+ and the libstdc++ of GCC 13+,
+    # so the binary runs on Ubuntu 24.04, Debian 13 and later.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable

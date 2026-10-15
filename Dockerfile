@@ -2,7 +2,9 @@
 # Run:   docker run -d --name openmod -v openmod-data:/data \
 #          -p 8088:8088 -p 127.0.0.1:8089:8089 openmod
 #        docker logs openmod   (the admin token, at first start)
-FROM rust:1-bookworm AS build
+# Trixie, not bookworm: the prebuilt ONNX Runtime links against glibc 2.38+
+# and the libstdc++ of GCC 13+.
+FROM rust:1-trixie AS build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock openmod.toml ./
 COPY .cargo .cargo
@@ -10,7 +12,7 @@ COPY src src
 COPY ui ui
 RUN cargo build --release --locked
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends libstdc++6 \
  && rm -rf /var/lib/apt/lists/* \

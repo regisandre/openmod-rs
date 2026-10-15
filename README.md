@@ -77,8 +77,10 @@ environment.
   [Choose what to load](#choose-what-to-load). Everything on: 1.55 GB of
   memory and 1.26 GB of model files.
 - **OS**: measured on Windows; every commit builds, passes the tests and
-  starts in Docker on Linux in CI. Other platforms ONNX Runtime supports
-  may work but are untested.
+  starts in Docker on Linux in CI. On Linux, the prebuilt ONNX Runtime
+  needs glibc 2.38 or later (Ubuntu 24.04, Debian 13, Fedora 39 and later)
+  to build and to run. Other platforms ONNX Runtime supports may work but
+  are untested.
 
 ### From source
 
