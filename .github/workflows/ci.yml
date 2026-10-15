@@ -20,3 +20,17 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build -t openmod .
+      - name: The image starts, writes its configuration and answers
+        run: |
+          docker run -d --name openmod -p 8088:8088 -p 127.0.0.1:8089:8089 openmod
+          for i in $(seq 30); do curl -sf http://127.0.0.1:8088/health && break; sleep 2; done
+          curl -sf http://127.0.0.1:8088/health | grep -q '"status"'
+          curl -sf -o /dev/null http://127.0.0.1:8089/
+          docker exec openmod test -f /data/openmod.toml
+          docker logs openmod 2>&1 | grep -q "admin token"

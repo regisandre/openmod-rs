@@ -69,15 +69,16 @@ environment.
 
 ### Requirements
 
-- **CPU**: x86-64 with AVX2 (x86-64-v3: any Intel CPU since Haswell, 2013,
-  and any AMD CPU since Excavator, 2015). The prebuilt ONNX Runtime needs
-  it. On Linux, `grep -o -m1 avx2 /proc/cpuinfo` prints `avx2` when it is
-  there.
+- **CPU**: x86-64 with AVX2 (x86-64-v3: most Intel CPUs since Haswell,
+  2013, and AMD CPUs since Excavator, 2015; some Pentium and Celeron models
+  lack it). The prebuilt ONNX Runtime needs it. On Linux,
+  `grep -o -m1 avx2 /proc/cpuinfo` prints `avx2` when it is there.
 - **Memory and disk**: they depend on the tools you turn on, see
   [Choose what to load](#choose-what-to-load). Everything on: 1.55 GB of
   memory and 1.26 GB of model files.
-- **OS**: tested on Linux and Windows. Other platforms ONNX Runtime
-  supports may work but are untested.
+- **OS**: measured on Windows; every commit builds, passes the tests and
+  starts in Docker on Linux in CI. Other platforms ONNX Runtime supports
+  may work but are untested.
 
 ### From source
 
