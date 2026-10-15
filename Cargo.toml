@@ -1,0 +1,42 @@
+[package]
+name = "openmod"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+description = "Lightweight, CPU-only, self-hosted image and text moderation with configurable workflows"
+repository = "https://github.com/regisandre/openmod-rs"
+readme = "README.md"
+keywords = ["moderation", "nsfw", "onnx", "content-safety", "self-hosted"]
+categories = ["computer-vision", "web-programming::http-server", "command-line-utilities"]
+
+[[bin]]
+name = "openmod"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "multipart", "query", "tokio"] }
+clap = { version = "4", features = ["derive", "env"] }
+getrandom = "0.3"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif"] }
+ort = "=2.0.0-rc.14"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+subtle = "2"
+thiserror = "2"
+tokenizers = { version = "0.22", default-features = false, features = ["fancy-regex"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "sync", "time"] }
+toml = "0.9"
+toml_edit = "0.25"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+unicode-normalization = "0.1.25"
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = true

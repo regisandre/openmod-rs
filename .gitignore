@@ -1,0 +1,8 @@
+/target
+/models/*
+!/models/README.md
+*.part
+eval-scores.jsonl
+__pycache__/
+/openmod-state.toml
+*.tmp

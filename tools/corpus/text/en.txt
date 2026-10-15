@@ -1,0 +1,68 @@
+# format: E|categories|context|text   (E: s=safe r=review x=reject; categories comma separated or -; context: b=bio e=event_description c=comment h=chat)
+s|-|e|Killer lineup this Saturday: three floors, eight DJs, and a sound system that will absolutely destroy your eardrums in the best way.
+s|-|c|That set was sick! The drop at 2am made the whole room lose it.
+s|-|e|Shots at the bar are 2 for 1 until midnight. Bring a friend and a reusable cup.
+s|-|c|Techno that destroys. I am still recovering from last night.
+s|-|b|Berlin-based selector. I dig for rare records and play them loud. Resident at Warehouse Sessions.
+s|-|e|Doors open at 10pm. Last entry 3am. Coat check is EUR 2. No re-entry after 4am.
+s|-|c|This festival is the bomb, best weekend of my life, I'm dead tired and happy.
+s|-|c|Her voice just killed me, I cried during the encore. Unreal.
+s|-|e|Open-air at the old harbour: smash burgers, craft beer, and a closing set by a legend. Dress for rain.
+s|-|c|The bass hit me like a truck, in a good way. My chest is still vibrating.
+s|-|b|Promoter, mum of two, and professional lover of bad puns. DMs open for booking enquiries.
+s|-|e|Free entry before 11pm with the guest list. Message us on the app to get on it.
+s|-|c|Sold out in 10 minutes?! You guys are crazy, I'm gutted I missed it.
+s|-|e|Bring earplugs - the headliner's set is brutal, in a literal wall-of-sound way.
+s|-|h|Hey, are you still selling the second ticket? I can pay by bank transfer via the app.
+s|-|c|Bar staff were savage with the speed, we got drinks in 30 seconds. Respect.
+s|-|e|Our night is a safe space: zero tolerance for harassment. Tell any staff member if something feels off.
+s|-|c|Absolute banger of a night. I danced until my feet gave out.
+s|-|e|Workshop: how to mix vinyl, for beginners. Bring headphones. Limited to 12 people.
+s|-|c|The security guy was a legend, he helped my friend who was feeling faint. Thank you.
+s|-|b|Drummer by day, bedroom producer by night. Influences: Four Tet, Floating Points, my neighbour's cat.
+s|-|h|What time are you playing? I'll come and kill the dancefloor with you lot at the front.
+s|-|e|Afterparty at the rooftop: sunrise set, vegan pancakes, and a very good coffee machine.
+s|-|c|Shot of the night goes to the photographer who caught the confetti blast at the exact right moment.
+s|-|e|Line-up announcement: 12 acts, 3 stages, 1 field. Camping tickets available, tents for hire.
+r|drugs|c|Anyone know where I can find molly in this city? Asking for the weekend, not trying to start anything.
+r|violence|c|If the DJ plays that track again I swear I'll lose my mind and smash something.
+r|harassment|c|Honestly the crowd last night was full of idiots, half of them couldn't dance to save their lives.
+r|sexual|e|Naked yoga and body-painting night, 18+ only, consent workshop at 9pm. Adults only, no photos.
+r|scam|c|Selling 2 tickets under face value, message me on WhatsApp for a quick deal, payment first please.
+r|hate|c|Those tourists from that country always ruin the clubs, they are so loud and cheap.
+r|drugs|b|Microdosing researcher and techno fan. Ask me about my stack, I'm very open about it.
+r|harassment|h|You looked amazing last night, give me your number, I won't take no for an answer :)
+r|self_harm|c|Honestly this week has been so bad I just want to disappear for a bit. Going to the festival to forget.
+r|violence|e|Fight night at the club: amateur boxing bouts in the ring, blood sport vibes, 18+ with waiver.
+x|harassment,hate|c|You are a worthless piece of trash and everybody at the club hates you, go back where you came from.
+x|harassment|c|You're such a dumb b*tch, nobody wants you at this event, delete your account.
+x|hate|c|Those f*gg*ts should not be allowed to hold a party in this city.
+x|hate|c|I hate n*ggers like you, get out of our venue.
+x|violence|h|I know where you live. Come to the show tomorrow and I will break your legs.
+x|violence|c|Someone should stab the promoter. I will bring the knife myself.
+x|sexual|h|Hot girls only: send nudes and I'll put you on the VIP list. Private pics, 18+ cam show, link in bio.
+x|sexual|b|Escort available tonight in your area, full service, incall/outcall, message for rates.
+x|self_harm|c|I can't do this anymore. I'm going to kill myself tonight, nobody will even notice.
+x|drugs|h|DM for pills. MDMA, ketamine, coke, delivery to the venue. Best prices, discreet.
+x|drugs|b|Selling xanax, molly and weed. Telegram @plugbrussels, bulk discount.
+x|scam|c|Double your crypto in 24h! Send 0.1 BTC and get 0.2 back, guaranteed: http://btc-doubler.example-scam.xyz
+x|scam|h|Your ticket order failed. Verify your card here to avoid cancellation: http://fest-tickets-secure.example-phish.com/login
+x|scam|c|Free VIP tickets to Tomorrowland! Just share this post and enter your bank login at bit.ly/free-vip-xx
+x|pii|c|Call the promoter at +44 7700 900123 or he will keep your deposit.
+x|pii|h|Here is my home address: 14 Elm Street, Leeds LS1 4AB. Come over after the show, and my IBAN is GB82 WEST 1234 5698 7654 32 for the cash.
+x|pii|c|His email is john.smith.private@example.com and his number is 06 12 34 56 78, spam him.
+x|spam|c|BUY NOW!!! BUY NOW!!! BUY NOW!!! BUY NOW!!! BUY NOW!!! click here click here click here
+x|spam|c|follow4follow follow4follow follow4follow cheap followers 1000 for 5 euro follow4follow
+x|illegal|h|Fake IDs for sale, passes any club door check, also counterfeit wristbands and tickets.
+x|illegal|c|Anyone want stolen phones from the cloakroom? Half price, no questions asked.
+x|harassment|c|kys you ugly loser, nobody liked your set, you suck and your mum is embarrassed
+x|hate,harassment|c|Go back to your own country, you filthy immigrants are ruining this scene.
+x|violence,hate|h|We should burn down that mosque-themed bar and everyone in it.
+x|sexual|c|Show your t*ts in the crowd, I'll pay 50 euros, DM me, I know where you'll be.
+x|drugs|e|Join our private party: LSD, MDMA and cocaine on the menu, pay at the door in cash, tell no one.
+x|scam|h|I am a Nigerian prince and need your help moving 5 million dollars, send your passport and bank details to claim 10 percent.
+s|-|c|l0l that drop was s1ck, my ears are still ringing
+x|harassment|c|y0u 4re 4 st*p1d wh0r3, k1ll y0urs3lf
+x|drugs|h|D M  f o r  p i l l s - x t c, 3 m m c, fast delivery
+r|harassment|c|lol you absolute clown 🤡🤡 learn to mix before you ruin another night
+x|violence|c|i will k i l l you 🔪🔪🔪 see you at the door

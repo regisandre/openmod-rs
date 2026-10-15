@@ -1,0 +1,67 @@
+s|-|e|Krasses Line-up am Samstag: drei Floors, acht DJs und eine Anlage, die dir die Ohren wegbläst. Geil!
+s|-|c|Das Set war so geil, der Drop um zwei Uhr nachts hat den ganzen Laden zum Ausrasten gebracht.
+s|-|e|Shots an der Bar: zwei zum Preis von einem bis Mitternacht. Bring Freunde und einen Mehrwegbecher mit.
+s|-|c|Techno, der alles zerlegt. Ich muss mich immer noch von gestern erholen.
+s|-|b|Berliner DJ und Plattensammler. Ich spiele laut, am liebsten Acid und Electro. Resident im Tresor-Umfeld.
+s|-|e|Einlass ab 22 Uhr, letzter Einlass 3 Uhr. Garderobe 2 Euro. Kein Wiedereinlass nach 4 Uhr.
+s|-|c|Das Festival war die Bombe, bestes Wochenende des Jahres, ich bin todmüde und glücklich.
+s|-|c|Ihre Stimme hat mich total umgehauen, ich hab bei der Zugabe geweint. Wahnsinn.
+s|-|e|Open Air am alten Hafen: Smash Burger, Craft Beer und ein Closing-Set von einer Legende. Bei Regen Regenjacke mitbringen.
+s|-|c|Der Bass hat mich weggeblasen, im positiven Sinn. Meine Brust vibriert immer noch.
+s|-|b|Veranstalterin, Mutter von zwei Kindern und Fan schlechter Wortwitze. Buchungsanfragen gern per Nachricht.
+s|-|e|Freier Eintritt vor 23 Uhr mit Gästeliste. Schreib uns einfach in der App, dann setzen wir dich drauf.
+s|-|c|In zehn Minuten ausverkauft?! Ihr seid verrückt, ich ärgere mich total, dass ich es verpasst habe.
+s|-|e|Ohrstöpsel nicht vergessen: Das Set des Headliners ist brutal laut, eine richtige Soundwand.
+s|-|h|Hi, verkaufst du das zweite Ticket noch? Ich könnte per Überweisung über die App zahlen.
+s|-|c|Das Barteam war mörderisch schnell, wir hatten unsere Drinks in 30 Sekunden. Respekt!
+s|-|e|Unsere Nacht ist ein Safe Space: null Toleranz für Belästigung. Sprich einfach jemanden vom Personal an.
+s|-|c|Absoluter Banger von einer Nacht. Ich habe getanzt, bis meine Füße nicht mehr konnten.
+s|-|e|Workshop: Vinyl mixen für Anfänger. Kopfhörer mitbringen, maximal zwölf Personen.
+s|-|c|Der Türsteher war ein Held, er hat meiner Freundin geholfen, der es schlecht ging. Danke!
+s|-|b|Schlagzeuger am Tag, Bedroom-Producer in der Nacht. Einflüsse: Moderat, Apparat und die Katze von nebenan.
+s|-|h|Wann spielst du? Ich komme und mache mit euch die Tanzfläche platt, ganz vorne mit dabei.
+s|-|e|Afterhour auf dem Dach: Sonnenaufgangs-Set, vegane Pfannkuchen und eine richtig gute Kaffeemaschine.
+s|-|c|Das Foto des Abends geht an die Fotografin, die den Konfettiregen im perfekten Moment erwischt hat.
+s|-|e|Line-up steht: 12 Acts, 3 Bühnen, 1 Wiese. Camping-Tickets sind noch da, Zelte kannst du mieten.
+r|drugs|c|Weiß jemand, wo man in der Stadt Molly herbekommt? Nur fürs Wochenende, ich will keinen Ärger machen.
+r|violence|c|Wenn der DJ den Track nochmal spielt, raste ich aus und schlage hier alles kurz und klein.
+r|harassment|c|Ehrlich, das Publikum gestern bestand aus Vollidioten, die Hälfte konnte nicht mal tanzen.
+r|sexual|e|FKK-Yoga und Bodypainting-Nacht, nur ab 18, Konsens-Workshop um 21 Uhr. Keine Fotos.
+r|scam|c|Verkaufe zwei Tickets unter Preis, schreib mir auf WhatsApp für einen schnellen Deal, erst zahlen bitte.
+r|hate|c|Diese Touristen aus dem Osten ruinieren jedes Mal die Clubs, so laut und so geizig.
+r|drugs|b|Mikrodosierung ist mein Forschungsthema und Techno meine Leidenschaft. Fragt mich ruhig zu meinem Stack.
+r|harassment|h|Du hast gestern super ausgesehen, gib mir deine Nummer, ein Nein akzeptiere ich nicht :)
+r|self_harm|c|Die Woche war so schlimm, ich würde am liebsten einfach verschwinden. Gehe aufs Festival, um abzuschalten.
+r|violence|e|Fight Night im Club: Amateur-Boxkämpfe im Ring, ab 18 mit Einverständniserklärung.
+x|harassment,hate|c|Du bist ein wertloses Stück Dreck und alle hier hassen dich, geh dahin zurück, wo du herkommst.
+x|harassment|c|Du bist so eine dumme Schlampe, keiner will dich auf dieser Party, lösch deinen Account.
+x|hate|c|Diese Schwuchteln sollten in dieser Stadt keine Party veranstalten dürfen.
+x|hate|c|Scheiß Kanaken, raus aus unserem Laden.
+x|violence|h|Ich weiß, wo du wohnst. Komm morgen zum Konzert, dann breche ich dir die Beine.
+x|violence|c|Jemand sollte den Veranstalter abstechen. Ich bringe das Messer selbst mit.
+x|sexual|h|Nur heiße Mädels: Schick Nacktbilder und ich setze dich auf die VIP-Liste. Private Fotos, Webcam ab 18, Link im Profil.
+x|sexual|b|Escort heute Abend in deiner Nähe, voller Service, Hausbesuch möglich, schreib für die Preise.
+x|self_harm|c|Ich kann nicht mehr. Ich bringe mich heute Nacht um, es merkt eh keiner.
+x|drugs|h|DM für Pillen. MDMA, Ketamin, Koks, Lieferung bis zum Club. Beste Preise, diskret.
+x|drugs|b|Verkaufe Xanax, Molly und Gras. Telegram @plugberlin, Mengenrabatt.
+x|scam|c|Verdopple dein Krypto in 24 Stunden! Sende 0,1 BTC und erhalte 0,2 zurück, garantiert: http://btc-verdoppler.example-scam.xyz
+x|scam|h|Deine Ticketbestellung ist fehlgeschlagen. Bestätige deine Karte hier, sonst wird sie storniert: http://fest-tickets-sicher.example-phish.com/login
+x|scam|c|Gratis VIP-Tickets für das Parookaville! Beitrag teilen und Bankdaten bei bit.ly/gratis-vip-xx eingeben.
+x|pii|c|Ruf den Veranstalter an unter +49 151 23456789, sonst behält er deine Kaution.
+x|pii|h|Meine Adresse: Musterstraße 12, 10115 Berlin. Komm nach der Show vorbei, meine IBAN für das Bargeld: DE89 3704 0044 0532 0130 00.
+x|pii|c|Seine E-Mail ist hans.mueller.privat@example.com und seine Nummer 0170 1234567, schreibt ihm alle.
+x|spam|c|JETZT KAUFEN!!! JETZT KAUFEN!!! JETZT KAUFEN!!! JETZT KAUFEN!!! hier klicken hier klicken hier klicken
+x|spam|c|follow4follow follow4follow billige Follower 1000 für 5 Euro follow4follow follow4follow
+x|illegal|h|Gefälschte Ausweise zu verkaufen, kommen an jeder Clubtür durch, auch gefälschte Bändchen und Tickets.
+x|illegal|c|Wer will geklaute Handys aus der Garderobe? Halber Preis, keine Fragen.
+x|harassment|c|Verpiss dich du hässlicher Versager, dein Set war scheiße und deine Mutter schämt sich für dich.
+x|hate,harassment|c|Geht zurück in euer eigenes Land, ihr dreckigen Ausländer ruiniert diese Szene.
+x|violence,hate|h|Wir sollten diese Moschee-Bar mit allen darin niederbrennen.
+x|sexual|c|Zeig deine T*tten in der Menge, ich zahle 50 Euro, schreib mir, ich weiß, wo du stehst.
+x|drugs|e|Private Party: LSD, MDMA und Kokain auf der Karte, Zahlung bar an der Tür, sagt es niemandem.
+x|scam|h|Ich bin ein Prinz und brauche deine Hilfe beim Transfer von 5 Millionen, schick Reisepass und Kontodaten für 10 Prozent.
+s|-|c|Alter, der Drop war so kr4ss, meine Ohren klingeln immer noch lol
+x|harassment|c|d u  b i s t  e i n e  d u m m e  S c h l 4 m p e , b r i n g  d i c h  u m
+x|drugs|h|D M  f ü r  P i l l e n - x t c, 3 m m c, schnelle Lieferung
+r|harassment|c|haha du Clown 🤡🤡 lern erst mal mixen, bevor du den nächsten Abend ruinierst
+x|violence|c|ich bring dich u m 🔪🔪🔪 bis gleich an der Tür

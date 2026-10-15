@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "openmod-rs image corpus manifest line (manifest.jsonl, one JSON object per line)",
+  "type": "object",
+  "required": ["path", "category", "expected", "source_url", "license", "author"],
+  "properties": {
+    "path": { "type": "string", "description": "Path relative to testdata/images/" },
+    "category": { "enum": ["safe_event", "safe_other", "suggestive", "nudity_artistic", "weapons", "alcohol", "drugs", "smoking", "gore_blood", "hate_symbols", "offensive_gesture", "text_in_image"] },
+    "expected": { "enum": ["safe", "review", "reject"], "description": "Provisional policy label; the category is the ground truth of what the image shows" },
+    "source_url": { "type": "string", "description": "Commons file page, or generated:<script> for synthetic images" },
+    "license": { "type": "string" },
+    "author": { "type": "string" },
+    "title": { "type": "string", "description": "Commons file title, informational" }
+  }
+}

@@ -1,0 +1,5 @@
+# Local evaluation corpus: only the hand-written text corpus, the README and the manifest schema are tracked.
+images/*
+!images/manifest.schema.json
+text/textdetox_sample.jsonl
+text/polyguard_sample.jsonl

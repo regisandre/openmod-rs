@@ -1,0 +1,6 @@
+# Keep LF everywhere: the shell scripts run in containers, and the prompt
+# head in tools/qwen3guard_head.txt must keep its exact bytes.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.onnx binary

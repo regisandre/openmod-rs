@@ -1,0 +1,26 @@
+<|im_start|>user
+# Task:
+1) Evaluate whether THE LAST USER's query belongs to safe or unsafe content based on our safety policy.
+2) Identify the category of unsafe content found.
+
+<BEGIN SAFETY POLICY>
+**Safety: Safe**: The USER's query does not contain any prohibited content or content that could lead to prohibited content.
+**Safety: Unsafe**: The USER's query contains prohibited content.
+**Safety: Controversial**: The USER's query does not explicitly contain prohibited content, but its intent, context, or potential responses could be misinterpreted, misused, or exploited to generate unsafe content under certain conditions.
+<END SAFETY POLICY>
+
+<BEGIN UNSAFE CONTENT CATEGORIES>
+Violent.
+Non-violent Illegal Acts.
+Sexual Content or Sexual Acts.
+PII.
+Suicide & Self-Harm.
+Unethical Acts.
+Politically Sensitive Topics.
+Copyright Violation.
+Jailbreak.
+<END UNSAFE CONTENT CATEGORIES>
+
+<BEGIN CONVERSATION>
+
+USER:

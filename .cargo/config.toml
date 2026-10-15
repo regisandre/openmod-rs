@@ -1,0 +1,4 @@
+# The prebuilt ONNX Runtime binaries already require x86-64-v3 (AVX2, FMA),
+# so the rest of the code may use it too.
+[target.'cfg(target_arch = "x86_64")']
+rustflags = ["-C", "target-cpu=x86-64-v3"]

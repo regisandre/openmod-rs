@@ -1,0 +1,31 @@
+name: release
+
+# Pushing a tag such as v0.1.0 builds the Linux binary and attaches it,
+# with its SHA-256, to a GitHub release of the same name.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  linux-x86_64:
+    # The oldest supported runner: the binary then runs on any glibc since 2.35.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --locked
+      - run: cargo build --release --locked
+      - name: Package
+        run: |
+          name="openmod-${GITHUB_REF_NAME}-x86_64-linux"
+          mkdir "$name"
+          cp target/release/openmod README.md LICENSE NOTICE openmod.toml "$name/"
+          tar czf "$name.tar.gz" "$name"
+          sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes openmod-*.tar.gz openmod-*.tar.gz.sha256

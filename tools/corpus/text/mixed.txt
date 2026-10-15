@@ -1,0 +1,13 @@
+# lang|E|categories|context|text   (mixed-language and obfuscated items; lang is the dominant language)
+en|s|-|c|Das set war einfach insane, tout le monde a perdu la tête, best night ever!
+fr|s|-|c|Ce DJ est un mood, el ambiente era de puta madre, vibes immaculées 🔥🔥
+es|s|-|c|Hoy playa y fiesta, we're going full send, nos vemos en la entrada 🎉
+nl|r|harassment|c|Dat optreden was echt shit, what a joke, zo'n loser zou nooit mogen draaien
+de|x|harassment|c|you are a f*cking Hurensohn, geh sterben, nobody wants you here
+it|x|drugs|h|Ciao bella, DM me per le pills, ecstasy e coca, delivery gratis, no police 💊💊
+en|x|scam|c|FR33 T1CK3TS!!! cl1ck h3re -> h t t p : / / fr33-t1ckets . example-scam . xyz n0w!!!
+en|x|harassment|c|k y s  y o u  w o r t h l e s s  p i e c e  o f  s h 1 t
+en|x|sexual|h|s3xy g1rls 4 u 🍑🍆💦 onlyf4ns l1nk 1n b10, 18+ c4m sh0w
+es|x|pii|h|mi tlf es seis uno dos tres cuatro cinco seis siete ocho, llamad ya, mi gmail es juan punto perez arroba example punto com
+en|r|violence|c|that headliner deserves to be shot out of a cannon 💥 (joking, mostly)
+uk|x|scam|c|Заробіток на крипті: пиши в tg @crypto_boss_xx, вклади 100$ і отримай 500$ за день, no risk, 100% payout

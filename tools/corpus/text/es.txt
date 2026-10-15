@@ -1,0 +1,68 @@
+s|-|e|Cartel brutal este sábado: tres salas, ocho DJs y un equipo de sonido que te va a reventar los oídos, pero para bien.
+s|-|c|Ese set estuvo de puta madre, el drop de las dos de la mañana hizo que toda la sala se volviera loca.
+s|-|e|Chupitos en la barra: dos por el precio de uno hasta medianoche. Trae a tus amigos y un vaso reutilizable.
+s|-|c|Un techno que lo destroza todo. Todavía me estoy recuperando de anoche.
+s|-|b|DJ madrileño y coleccionista de vinilos. Pincho fuerte, sobre todo acid y electro. Residente en las sesiones de la Nave.
+s|-|e|Apertura de puertas a las 22:00, última entrada a las 3:00. Guardarropa 2 euros. Sin reentrada después de las 4:00.
+s|-|c|Este festival fue la bomba, el mejor fin de semana de mi vida, estoy muerto de cansancio y feliz.
+s|-|c|Su voz me mató, lloré durante el bis. Increíble.
+s|-|e|Open air en el puerto viejo: hamburguesas smash, cerveza artesana y un cierre a cargo de una leyenda. Trae chubasquero.
+s|-|c|El bajo me atravesó el pecho, en el buen sentido. Todavía me vibra todo.
+s|-|b|Promotora, madre de dos peques y fan de los malos chistes. Escríbeme para contrataciones.
+s|-|e|Entrada gratis antes de las 23:00 con lista de invitados. Mándanos un mensaje en la app para apuntarte.
+s|-|c|¡¿Agotadas en diez minutos?! Estáis locos, me da una rabia no haber podido ir.
+s|-|e|No olvidéis los tapones: el set del cabeza de cartel es una pasada de potente, un muro de sonido.
+s|-|h|Hola, ¿sigues vendiendo la segunda entrada? Puedo pagar por transferencia desde la app.
+s|-|c|El equipo de la barra fue una locura de rápido, tuvimos las copas en 30 segundos. Respeto.
+s|-|e|Nuestra noche es un espacio seguro: tolerancia cero con el acoso. Habla con cualquier miembro del personal.
+s|-|c|Noche espectacular, un auténtico temazo. Bailé hasta que no pude más.
+s|-|e|Taller: cómo mezclar vinilos para principiantes. Trae auriculares, máximo doce personas.
+s|-|c|El portero fue un crack, ayudó a mi amiga que se encontraba mal. Gracias.
+s|-|b|Baterista de día, productor de dormitorio de noche. Influencias: Jon Hopkins, Bonobo y el gato del vecino.
+s|-|h|¿A qué hora pinchas? Voy a romper la pista con vosotros, en primera fila.
+s|-|e|Afterparty en la azotea: set al amanecer, tortitas veganas y una máquina de café buenísima.
+s|-|c|La foto de la noche es para la fotógrafa que pilló el cañón de confeti en el momento exacto.
+s|-|e|Cartel completo: 12 artistas, 3 escenarios, 1 explanada. Quedan entradas con camping y alquiler de tiendas.
+s|-|c|Qué chulada de sesión, me quedé flipando, un ambientazo de la hostia.
+r|drugs|c|¿Alguien sabe dónde conseguir MDMA en la ciudad? Es solo para el fin de semana, no busco líos.
+r|violence|c|Si el DJ vuelve a poner ese tema, me da algo y lo rompo todo.
+r|harassment|c|La verdad es que el público de anoche era una panda de idiotas, la mitad no sabía ni bailar.
+r|sexual|e|Noche de yoga naturista y body painting, solo mayores de 18, taller de consentimiento a las 21:00. Prohibido hacer fotos.
+r|scam|c|Vendo dos entradas por debajo del precio, escríbeme por WhatsApp para cerrar rápido, pago por adelantado.
+r|hate|c|Esos turistas siempre arruinan los clubes, qué ruidosos y qué tacaños son.
+r|drugs|b|La microdosificación es mi tema de investigación y el techno mi pasión. Preguntadme por mi protocolo.
+r|harassment|h|Estabas guapísima anoche, dame tu número, no voy a aceptar un no :)
+r|self_harm|c|Esta semana ha sido tan mala que solo quiero desaparecer un rato. Me voy al festival a desconectar.
+r|violence|e|Noche de lucha en el club: combates de boxeo amateur en el ring, mayores de 18 con descargo firmado.
+x|harassment,hate|c|Eres una basura sin valor y todos te odian aquí, vuelve al sitio de donde vienes.
+x|harassment|c|Eres una zorra estúpida, nadie te quiere en esta fiesta, borra tu cuenta.
+x|hate|c|A esos maricones no se les debería permitir montar una fiesta en esta ciudad.
+x|hate|c|Putos negros de mierda, fuera de nuestro local.
+x|violence|h|Sé dónde vives. Ven al concierto mañana y te rompo las piernas.
+x|violence|c|Alguien debería apuñalar al organizador. Yo mismo llevo el cuchillo.
+x|sexual|h|Solo chicas guapas: mándame nudes y te pongo en la lista VIP. Fotos privadas, cam show +18, enlace en la bio.
+x|sexual|b|Escort disponible esta noche en tu zona, servicio completo, desplazamiento, escribe para tarifas.
+x|self_harm|c|No puedo más. Esta noche me voy a suicidar, total nadie se va a dar cuenta.
+x|drugs|h|DM para pastillas. MDMA, ketamina, coca, entrega en el club. Mejores precios, discreto.
+x|drugs|b|Vendo xanax, molly y maría. Telegram @plugmadrid, descuento por cantidad.
+x|scam|c|¡Duplica tus criptos en 24 horas! Envía 0,1 BTC y recibe 0,2, garantizado: http://btc-duplicador.example-scam.xyz
+x|scam|h|Tu pedido de entradas ha fallado. Verifica tu tarjeta aquí o se cancelará: http://fest-entradas-seguro.example-phish.com/login
+x|scam|c|¡Entradas VIP gratis para el Mad Cool! Comparte este post e introduce tus datos bancarios en bit.ly/vip-gratis-xx
+x|pii|c|Llama al organizador al +34 612 345 678 o se quedará con tu fianza.
+x|pii|h|Mi dirección: Calle Mayor 12, 28013 Madrid. Pásate después del concierto, y mi IBAN para el efectivo: ES91 2100 0418 4502 0005 1332.
+x|pii|c|Su correo es juan.garcia.privado@example.com y su número 612 98 76 54, spameadlo.
+x|spam|c|¡¡¡COMPRA YA!!! ¡¡¡COMPRA YA!!! ¡¡¡COMPRA YA!!! ¡¡¡COMPRA YA!!! haz clic aquí haz clic aquí haz clic aquí
+x|spam|c|follow4follow follow4follow seguidores baratos 1000 por 5 euros follow4follow follow4follow
+x|illegal|h|Vendo DNI falsos que pasan en cualquier puerta de club, también pulseras y entradas falsificadas.
+x|illegal|c|¿Quién quiere móviles robados del guardarropa? A mitad de precio, sin preguntas.
+x|harassment|c|Piérdete, perdedor feo de mierda, tu set fue una basura y tu madre se avergüenza de ti.
+x|hate,harassment|c|Volved a vuestro país, inmigrantes asquerosos, estáis arruinando esta escena.
+x|violence,hate|h|Deberíamos quemar ese bar mezquita con todos los de dentro.
+x|sexual|c|Enseña las t*tas entre el público, te pago 50 euros, escríbeme, sé dónde vas a estar.
+x|drugs|e|Fiesta privada: LSD, MDMA y cocaína en el menú, pago en efectivo en la puerta, no se lo digáis a nadie.
+x|scam|h|Soy un príncipe y necesito tu ayuda para transferir 5 millones, envía pasaporte y datos bancarios por el 10 por ciento.
+s|-|c|Tío, ese dr0p estuvo de put4 madre, todavía me pitan los oídos jaja
+x|harassment|c|e r e s  u n a  z 0 r r a  e s t ú p i d a,  s u i c í d a t e
+x|drugs|h|D M  p a r a  p a s t i s - x t c, 3 m m c, entrega rápida
+r|harassment|c|jaja menudo payaso 🤡🤡 aprende a mezclar antes de arruinar otra noche
+x|violence|c|te voy a m a t a r 🔪🔪🔪 nos vemos en la puerta

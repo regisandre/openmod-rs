@@ -1,0 +1,68 @@
+s|-|e|Geweldige line-up zaterdag: drie zalen, acht DJ's en een geluidsinstallatie die je oren van je hoofd blaast, in positieve zin.
+s|-|c|Die set was ziek! De drop om twee uur 's nachts liet de hele zaal uit zijn dak gaan.
+s|-|e|Shotjes aan de bar: twee voor de prijs van één tot middernacht. Neem vrienden en een herbruikbare beker mee.
+s|-|c|Techno die alles kapotmaakt. Ik ben nog steeds aan het bijkomen van gisteravond.
+s|-|b|Antwerpse DJ en platenverzamelaar. Ik draai hard, vooral acid en electro. Resident bij de Pakhuis Sessions.
+s|-|e|Deuren open om 22 uur, laatste toegang om 3 uur. Garderobe 2 euro. Geen herintrede na 4 uur.
+s|-|c|Dit festival was de max, het beste weekend van mijn leven, ik ben bekaf en blij.
+s|-|c|Haar stem maakte me kapot, ik heb gehuild tijdens de toegift. Ongelooflijk.
+s|-|e|Openluchtfeest aan de oude haven: smashburgers, ambachtelijk bier en een afsluitende set van een legende. Neem een regenjas mee.
+s|-|c|De bas ramde door mijn borst, op de goede manier. Alles trilt nog.
+s|-|b|Organisator, moeder van twee kinderen en fan van slechte woordgrappen. Stuur me een bericht voor boekingen.
+s|-|e|Gratis toegang voor 23 uur met de gastenlijst. Stuur ons een bericht in de app om erop te komen.
+s|-|c|In tien minuten uitverkocht?! Jullie zijn gek, ik baal enorm dat ik het gemist heb.
+s|-|e|Vergeet je oordoppen niet: de set van de headliner is bruut, een echte muur van geluid.
+s|-|h|Hoi, verkoop je het tweede ticket nog? Ik kan betalen via overschrijving in de app.
+s|-|c|Het barteam was moordsnel, we hadden onze drankjes in 30 seconden. Respect.
+s|-|e|Onze avond is een veilige plek: nultolerantie voor intimidatie. Spreek gewoon iemand van het personeel aan.
+s|-|c|Absolute knaller van een avond. Ik heb gedanst tot mijn voeten het begaven.
+s|-|e|Workshop: vinyl mixen voor beginners. Neem een koptelefoon mee, maximaal twaalf personen.
+s|-|c|De portier was een held, hij hielp mijn vriendin die zich niet goed voelde. Bedankt!
+s|-|b|Drummer overdag, slaapkamerproducer 's nachts. Invloeden: Lost Frequencies, Charlotte de Witte en de kat van de buren.
+s|-|h|Hoe laat draai je? Ik kom de dansvloer slopen met jullie, helemaal vooraan.
+s|-|e|Afterparty op het dak: zonsopgangsset, vegan pannenkoeken en een heel goede koffiemachine.
+s|-|c|De foto van de avond gaat naar de fotograaf die het confettikanon op het perfecte moment pakte.
+s|-|e|Line-up compleet: 12 acts, 3 podia, 1 weide. Er zijn nog campingtickets, tenten te huur.
+s|-|c|Wat een bak van een avond, ik stond te kijken, een sfeer om u tegen te zeggen, echt geweldig.
+r|drugs|c|Weet iemand waar je in de stad aan MDMA komt? Alleen voor het weekend, ik zoek geen gedoe.
+r|violence|c|Als de DJ dat nummer nog een keer draait, word ik gek en sla ik alles kapot.
+r|harassment|c|Eerlijk gezegd was het publiek gisteren een bende idioten, de helft kon niet eens dansen.
+r|sexual|e|Naaktyoga en bodypaint-avond, alleen 18+, consent-workshop om 21 uur. Fotograferen verboden.
+r|scam|c|Ik verkoop twee tickets onder de prijs, app me op WhatsApp voor een snelle deal, eerst betalen graag.
+r|hate|c|Die toeristen uit het oosten verpesten altijd de clubs, zo luidruchtig en zo gierig.
+r|drugs|b|Microdosering is mijn onderzoeksonderwerp en techno mijn passie. Vraag me gerust naar mijn schema.
+r|harassment|h|Je zag er gisteren geweldig uit, geef me je nummer, nee accepteer ik niet :)
+r|self_harm|c|Deze week was zo slecht dat ik even wil verdwijnen. Ik ga naar het festival om te vergeten.
+r|violence|e|Fight night in de club: amateurboksgevechten in de ring, 18+ met getekende vrijwaring.
+x|harassment,hate|c|Je bent een waardeloos stuk vuil en iedereen hier haat je, ga terug naar waar je vandaan komt.
+x|harassment|c|Je bent zo'n domme del, niemand wil jou op dit feest, verwijder je account.
+x|hate|c|Die flikkers zouden in deze stad geen feest mogen organiseren.
+x|hate|c|Vuile n*gers, rot op uit onze club.
+x|violence|h|Ik weet waar je woont. Kom morgen naar het concert en ik breek je benen.
+x|violence|c|Iemand zou de organisator moeten neersteken. Ik breng zelf het mes mee.
+x|sexual|h|Alleen hete meiden: stuur nudes en ik zet je op de VIP-lijst. Privéfoto's, camshow 18+, link in bio.
+x|sexual|b|Escort beschikbaar vanavond in jouw buurt, volledige service, aan huis mogelijk, stuur een bericht voor de tarieven.
+x|self_harm|c|Ik kan niet meer. Vanavond maak ik een eind aan mijn leven, niemand merkt het toch.
+x|drugs|h|DM voor pillen. MDMA, ketamine, coke, levering tot aan de club. Beste prijzen, discreet.
+x|drugs|b|Verkoop xanax, molly en wiet. Telegram @plugbrussel, korting bij grote hoeveelheden.
+x|scam|c|Verdubbel je crypto in 24 uur! Stuur 0,1 BTC en krijg 0,2 terug, gegarandeerd: http://btc-verdubbelaar.example-scam.xyz
+x|scam|h|Je ticketbestelling is mislukt. Controleer hier je kaart anders wordt ze geannuleerd: http://fest-tickets-veilig.example-phish.com/login
+x|scam|c|Gratis VIP-tickets voor Tomorrowland! Deel dit bericht en vul je bankgegevens in op bit.ly/gratis-vip-xx
+x|pii|c|Bel de organisator op +31 6 12345678 anders houdt hij je waarborg.
+x|pii|h|Mijn adres: Kerkstraat 12, 1017 GC Amsterdam. Kom langs na het concert, en mijn IBAN voor het cash: NL91 ABNA 0417 1643 00.
+x|pii|c|Zijn e-mail is jan.jansen.prive@example.com en zijn nummer 06 87654321, spam hem allemaal.
+x|spam|c|KOOP NU!!! KOOP NU!!! KOOP NU!!! KOOP NU!!! klik hier klik hier klik hier
+x|spam|c|follow4follow follow4follow goedkope volgers 1000 voor 5 euro follow4follow follow4follow
+x|illegal|h|Vervalste identiteitskaarten te koop, komen door elke clubdeur, ook valse polsbandjes en tickets.
+x|illegal|c|Wie wil gestolen telefoons uit de garderobe? Halve prijs, geen vragen.
+x|harassment|c|Rot op, lelijke loser, je set was waardeloos en je moeder schaamt zich voor je.
+x|hate,harassment|c|Ga terug naar je eigen land, vuile immigranten, jullie verpesten deze scene.
+x|violence,hate|h|We zouden die moskee-bar moeten platbranden met iedereen erin.
+x|sexual|c|Laat je t*tten zien in de menigte, ik betaal 50 euro, stuur me een bericht, ik weet waar je staat.
+x|drugs|e|Privéfeest: LSD, MDMA en cocaïne op het menu, contant betalen aan de deur, vertel het niemand.
+x|scam|h|Ik ben een prins en heb je hulp nodig om 5 miljoen over te maken, stuur paspoort en bankgegevens voor 10 procent.
+s|-|c|Gast, die dr0p was zo k4k goed, mijn oren piepen nog lol
+x|harassment|c|j e  b e n t  e e n  d o m m e  h 0 e r,  p l e g  z e l f m o o r d
+x|drugs|h|D M  v o o r  p i l l e n - x t c, 3 m m c, snelle levering
+r|harassment|c|haha wat een clown 🤡🤡 leer eerst mixen voordat je nog een avond verpest
+x|violence|c|ik maak je d o o d 🔪🔪🔪 tot zo bij de ingang

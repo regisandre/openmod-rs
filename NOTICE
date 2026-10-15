@@ -1,0 +1,27 @@
+openmod
+Copyright 2026 the openmod contributors
+
+This product's source code is licensed under the Apache License 2.0
+(see LICENSE).
+
+The model files openmod downloads are NOT part of this repository and keep
+their own licenses:
+
+- Marqo/nsfw-image-detection-384 (ONNX conversion by KanariKanaru)
+  Apache-2.0 - https://huggingface.co/Marqo/nsfw-image-detection-384
+- OwenElliott/image-safety-classifier-xs
+  MIT - https://huggingface.co/OwenElliott/image-safety-classifier-xs
+- google/siglip-base-patch16-224 (ONNX conversion by Xenova)
+  Apache-2.0 - https://huggingface.co/google/siglip-base-patch16-224
+- Qwen/Qwen3Guard-Gen-0.6B
+  Apache-2.0 - https://huggingface.co/Qwen/Qwen3Guard-Gen-0.6B
+  qwen3guard-q4.onnx is a derivative: exported to ONNX with its prompt head
+  precomputed and its weights quantized to 4 bits by tools/export_qwen3guard.py,
+  and published with openmod's `models-v1` release.
+- fastino/GLiNER2-Guardrails-PII-Multi
+  Apache-2.0 - https://huggingface.co/fastino/GLiNER2-Guardrails-PII-Multi
+  gliguard-emb4.onnx and gliguard-tokenizer.json are derivatives: exported to
+  ONNX with the embedding table quantized to 4 bits by tools/export_gliguard.py,
+  and published with openmod's `models-v1` release.
+
+ONNX Runtime is linked statically: MIT - https://github.com/microsoft/onnxruntime

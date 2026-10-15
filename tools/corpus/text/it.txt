@@ -1,0 +1,68 @@
+s|-|e|Line-up pazzesca sabato: tre sale, otto DJ e un impianto che ti spacca le orecchie, nel senso migliore.
+s|-|c|Quel set era una bomba, il drop delle due di notte ha fatto impazzire tutto il locale.
+s|-|e|Shottini al bar: due al prezzo di uno fino a mezzanotte. Porta gli amici e un bicchiere riutilizzabile.
+s|-|c|Una techno che distrugge tutto. Mi sto ancora riprendendo da ieri sera.
+s|-|b|DJ milanese e collezionista di vinili. Suono forte, soprattutto acid ed electro. Resident alle serate Magazzino.
+s|-|e|Porte aperte dalle 22, ultimo ingresso alle 3. Guardaroba 2 euro. Nessun rientro dopo le 4.
+s|-|c|Questo festival è stato una figata, il miglior weekend della mia vita, sono distrutto e felice.
+s|-|c|La sua voce mi ha ucciso, ho pianto durante il bis. Incredibile.
+s|-|e|Open air al vecchio porto: smash burger, birra artigianale e un closing set di una leggenda. Portate l'impermeabile.
+s|-|c|Il basso mi ha sfondato il petto, in senso buono. Vibra ancora tutto.
+s|-|b|Promoter, mamma di due bambini e fan delle battute pessime. Scrivetemi per le prenotazioni.
+s|-|e|Ingresso gratuito prima delle 23 con la lista. Mandaci un messaggio nell'app per entrare in lista.
+s|-|c|Sold out in dieci minuti?! Siete pazzi, sono sconvolto di essermelo perso.
+s|-|e|Non scordate i tappi per le orecchie: il set dell'headliner è violentissimo, un vero muro di suono.
+s|-|h|Ciao, vendi ancora il secondo biglietto? Posso pagare con bonifico tramite l'app.
+s|-|c|Il team del bar era velocissimo, abbiamo avuto i drink in 30 secondi. Rispetto.
+s|-|e|La nostra serata è uno spazio sicuro: tolleranza zero per le molestie. Parla con qualsiasi membro dello staff.
+s|-|c|Serata clamorosa, un vero pezzo da novanta. Ho ballato finché i piedi hanno ceduto.
+s|-|e|Workshop: come mixare i vinili, per principianti. Porta le cuffie, massimo dodici persone.
+s|-|c|Il buttafuori è stato un mito, ha aiutato la mia amica che stava male. Grazie!
+s|-|b|Batterista di giorno, produttore da cameretta di notte. Influenze: Bonobo, Caribou e il gatto del vicino.
+s|-|h|A che ora suoni? Vengo a spaccare la pista con voi, sotto il palco.
+s|-|e|Afterparty sul tetto: set all'alba, pancake vegani e una macchina del caffè eccezionale.
+s|-|c|La foto della serata va alla fotografa che ha preso il cannone di coriandoli nell'istante perfetto.
+s|-|e|Line-up completo: 12 artisti, 3 palchi, 1 prato. Biglietti con campeggio ancora disponibili, tende a noleggio.
+s|-|c|Che serata della madonna, sono rimasto a bocca aperta, atmosfera da urlo.
+r|drugs|c|Qualcuno sa dove trovare dell'MDMA in città? Solo per il weekend, non cerco guai.
+r|violence|c|Se il DJ rimette quel pezzo, do di matto e spacco tutto.
+r|harassment|c|Sinceramente il pubblico di ieri era pieno di idioti, metà non sapeva nemmeno ballare.
+r|sexual|e|Serata di yoga naturista e body painting, solo maggiorenni, workshop sul consenso alle 21. Vietato fotografare.
+r|scam|c|Vendo due biglietti sotto prezzo, scrivimi su WhatsApp per chiudere in fretta, pagamento prima per favore.
+r|hate|c|Quei turisti dell'est rovinano sempre i locali, così rumorosi e tirchi.
+r|drugs|b|La microdose è il mio tema di ricerca e la techno la mia passione. Chiedetemi pure del mio protocollo.
+r|harassment|h|Ieri sera eri bellissima, dammi il tuo numero, non accetto un no come risposta :)
+r|self_harm|c|Questa settimana è stata così brutta che vorrei solo sparire per un po'. Vado al festival per staccare.
+r|violence|e|Fight night al club: incontri di boxe amatoriale sul ring, 18+ con liberatoria firmata.
+x|harassment,hate|c|Sei un pezzo di merda inutile e qui tutti ti odiano, torna da dove sei venuto.
+x|harassment|c|Sei una troia stupida, nessuno ti vuole a questa festa, cancella il tuo account.
+x|hate|c|Quei f*oci non dovrebbero poter organizzare una festa in questa città.
+x|hate|c|Sporchi n*gri di merda, fuori dal nostro locale.
+x|violence|h|So dove abiti. Vieni al concerto domani e ti spezzo le gambe.
+x|violence|c|Qualcuno dovrebbe accoltellare l'organizzatore. Porto io il coltello.
+x|sexual|h|Solo ragazze sexy: manda nudi e ti metto nella lista VIP. Foto private, cam show 18+, link in bio.
+x|sexual|b|Escort disponibile stasera nella tua zona, servizio completo, anche a domicilio, scrivi per le tariffe.
+x|self_harm|c|Non ce la faccio più. Stanotte mi uccido, tanto nessuno se ne accorgerà.
+x|drugs|h|DM per pillole. MDMA, ketamina, coca, consegna al locale. Prezzi migliori, discreto.
+x|drugs|b|Vendo xanax, molly ed erba. Telegram @plugroma, sconto sulle quantità.
+x|scam|c|Raddoppia le tue crypto in 24 ore! Invia 0,1 BTC e ricevi 0,2, garantito: http://btc-raddoppio.example-scam.xyz
+x|scam|h|Il tuo ordine di biglietti è fallito. Verifica la carta qui o verrà annullato: http://fest-biglietti-sicuri.example-phish.com/login
+x|scam|c|Biglietti VIP gratis per il Parkelife! Condividi questo post e inserisci i dati bancari su bit.ly/vip-gratis-xx
+x|pii|c|Chiama l'organizzatore al +39 347 123 4567 o si terrà la tua cauzione.
+x|pii|h|Il mio indirizzo: Via Roma 12, 20121 Milano. Passa dopo il concerto, e il mio IBAN per i contanti: IT60 X054 2811 1010 0000 0123 456.
+x|pii|c|La sua email è mario.rossi.privato@example.com e il suo numero 347 987 6543, spammatelo.
+x|spam|c|COMPRA ORA!!! COMPRA ORA!!! COMPRA ORA!!! COMPRA ORA!!! clicca qui clicca qui clicca qui
+x|spam|c|follow4follow follow4follow follower economici 1000 per 5 euro follow4follow follow4follow
+x|illegal|h|Vendo carte d'identità false che passano a qualsiasi porta di club, anche braccialetti e biglietti contraffatti.
+x|illegal|c|Chi vuole telefoni rubati dal guardaroba? Metà prezzo, niente domande.
+x|harassment|c|Vattene brutto perdente di merda, il tuo set faceva schifo e tua madre si vergogna di te.
+x|hate,harassment|c|Tornate nel vostro paese, sporchi immigrati, state rovinando questa scena.
+x|violence,hate|h|Dovremmo bruciare quel bar moschea con tutti quelli dentro.
+x|sexual|c|Mostra le t*tte tra la folla, ti pago 50 euro, scrivimi, so dove sarai.
+x|drugs|e|Festa privata: LSD, MDMA e cocaina nel menu, pagamento in contanti all'ingresso, non ditelo a nessuno.
+x|scam|h|Sono un principe e ho bisogno del tuo aiuto per trasferire 5 milioni, manda passaporto e dati bancari per il 10 per cento.
+s|-|c|Raga, quel dr0p era una f1gata, mi fischiano ancora le orecchie lol
+x|harassment|c|s e i  u n a  t r 0 i a  s t u p i d a,  u c c i d i t i
+x|drugs|h|D M  p e r  p i l l o l e - x t c, 3 m m c, consegna rapida
+r|harassment|c|ahah che pagliaccio 🤡🤡 impara a mixare prima di rovinare un'altra serata
+x|violence|c|ti u c c i d o 🔪🔪🔪 ci vediamo all'ingresso

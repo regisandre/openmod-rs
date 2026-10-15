@@ -1,0 +1,219 @@
+# openmod configuration. Paths are relative to this file.
+# Thresholds are starting points: calibrate them on your own content with
+# `openmod eval` before relying on them.
+
+[server]
+bind = "127.0.0.1:8088"
+max_upload_bytes = 15_728_640
+max_image_pixels = 50_000_000
+max_text_chars = 20_000
+max_concurrent = 2
+threads_per_model = 2
+# API keys: OPENMOD_API_KEYS="key1,key2", one key per line in this file, or
+# the keys created in the admin interface (kept in `state_file`).
+# api_keys_file = "/etc/openmod/keys"
+allow_unauthenticated = false
+# The admin token and the API keys of the admin interface, as digests only.
+state_file = "openmod-state.toml"
+
+# The admin web interface, on its own port. Keep it on loopback and reach it
+# through an SSH tunnel or an HTTPS reverse proxy.
+[admin]
+enabled = true
+bind = "127.0.0.1:8089"
+
+# ---------------------------------------------------------------- models
+
+# Marqo ViT-tiny NSFW classifier (5.6M params, Apache-2.0).
+[models.marqo_nsfw]
+kind = "image_classifier"
+path = "models/marqo-nsfw-384.onnx"
+size = 384
+resize = "shorter_side_crop"
+filter = "bicubic"
+pixel_range = "unit"
+mean = [0.5, 0.5, 0.5]
+std = [0.5, 0.5, 0.5]
+softmax = true
+classes = ["NSFW", "SFW"]
+categories = { NSFW = "nudity" }
+
+# SwiftFormer-XS safety classifier (3.5M params, MIT): NSFW, NSFL (gore), SFW.
+# Normalization and softmax are inside the graph.
+[models.owen_safety]
+kind = "image_classifier"
+path = "models/owen-safety-xs.onnx"
+size = 224
+resize = "stretch"
+filter = "bilinear"
+pixel_range = "byte"
+classes = ["NSFL", "NSFW", "SFW"]
+categories = { NSFL = "gore", NSFW = "nudity" }
+
+# SigLIP base zero-shot (Apache-2.0). Each category is a list of English
+# prompts; the best-matching prompt gives the category score. Add a
+# category by adding a line, no retraining.
+[models.siglip]
+kind = "image_zero_shot"
+vision = "models/siglip-vision-int8.onnx"
+text = "models/siglip-text-int8.onnx"
+tokenizer = "models/siglip-tokenizer.json"
+size = 224
+resize = "stretch"
+filter = "bicubic"
+pixel_range = "unit"
+logit_scale = 4.7649970054626465
+logit_bias = -12.9324369430542
+
+# `shift` moves each category's decision boundary to a score of 0.5. The
+# values below were measured on the bundled evaluation corpus with
+# `openmod eval` + `tools/calibrate.py`; re-measure on your own content.
+[models.siglip.concepts]
+weapon = { shift = 6.5, prompts = [
+  "a photo of a gun",
+  "a photo of a handgun",
+  "a photo of a rifle",
+  "a person holding a gun",
+  "a photo of a knife used as a weapon",
+] }
+alcohol = { shift = 6.5, prompts = [
+  "a photo of a bottle of beer",
+  "a photo of a glass of wine",
+  "a photo of a cocktail",
+  "a photo of bottles of liquor",
+] }
+drugs = { shift = 6.6, prompts = [
+  "a photo of drugs",
+  "a photo of pills and powder",
+  "a photo of a syringe",
+  "a photo of cannabis",
+  "a photo of a line of cocaine",
+] }
+smoking = { shift = 8.1, prompts = [
+  "a photo of a person smoking a cigarette",
+  "a photo of cigarettes",
+  "a photo of a vape",
+] }
+suggestive = { shift = 4.6, prompts = [
+  "a photo of a person in lingerie",
+  "a photo of a person in a bikini",
+  "a sexy photo",
+] }
+hate_symbol = { shift = 3.3, prompts = [
+  "a photo of a nazi swastika flag",
+  "a photo of a ku klux klan hood",
+  "a photo of a nazi salute",
+] }
+offensive_gesture = { shift = 6.3, prompts = [
+  "a photo of a hand showing the middle finger",
+] }
+violence = { shift = 5.9, prompts = [
+  "a photo of people fighting",
+  "a photo of a violent assault",
+] }
+gore = { shift = 3.0, prompts = [
+  "a photo of blood and gore",
+  "a photo of a bloody wound",
+] }
+
+# GLiGuard (GLiNER2-Guardrails-PII-Multi, mDeBERTa-v3, Apache-2.0): reads the
+# task and label names, so labels can be edited without retraining. The
+# embedding is quantized to 4 bits, the rest stays fp32 (4-bit matmuls cost
+# too much accuracy on this encoder).
+[models.gliguard]
+kind = "text_classifier"
+path = "models/gliguard-emb4.onnx"
+tokenizer = "models/gliguard-tokenizer.json"
+
+[[models.gliguard.tasks]]
+name = "prompt_safety"
+labels = ["safe", "unsafe"]
+categories = { unsafe = "text_unsafe" }
+
+[[models.gliguard.tasks]]
+name = "prompt_toxicity"
+multi_label = true
+labels = [
+  "violence_and_weapons", "non_violent_crime", "sexual_content", "hate_and_discrimination",
+  "self_harm_and_suicide", "pii_exposure", "misinformation", "copyright_violation", "child_safety",
+  "political_manipulation", "unethical_conduct", "regulated_advice", "privacy_violation", "other", "benign",
+]
+categories = { violence_and_weapons = "violence", non_violent_crime = "illegal", sexual_content = "sexual", hate_and_discrimination = "hate", self_harm_and_suicide = "self_harm", pii_exposure = "pii", misinformation = "misinformation", copyright_violation = "copyright", child_safety = "child_safety", political_manipulation = "political", unethical_conduct = "unethical", regulated_advice = "regulated_advice", privacy_violation = "privacy" }
+
+# Qwen3Guard-Gen 0.6B (Apache-2.0), multilingual, exported to ONNX with its
+# prompt head precomputed and weights quantized to 4 bits. Second opinion:
+# it runs only when GLiGuard sees some risk (`text_unsafe` >= 0.2) and its
+# scores are averaged with GLiGuard's, which removes many confident mistakes
+# of either model. Delete this block for 4x faster text checks and about
+# 650 MB less memory, at the cost of recall (see README).
+[models.qwen3guard]
+kind = "text_guard"
+path = "models/qwen3guard-q4.onnx"
+tokenizer = "models/qwen3guard-tokenizer.json"
+second_opinion = { category = "text_unsafe", low = 0.2, high = 1.0 }
+
+# ------------------------------------------------------------- workflows
+# Only the models that score a category listed in the workflow run.
+
+[workflows.default.image]
+nudity = { reject = 0.8, review = 0.5 }
+gore = { reject = 0.8, review = 0.5 }
+weapon = { reject = 0.7, review = 0.5 }
+hate_symbol = { reject = 0.7, review = 0.5 }
+drugs = { review = 0.5 }
+
+[workflows.default.text]
+# `text_unsafe` is the overall verdict; a category never scores above it, so
+# the categories name the reason without flagging anything on their own.
+text_unsafe = { reject = 0.8, review = 0.5 }
+violence = { reject = 0.8, review = 0.5 }
+sexual = { reject = 0.8, review = 0.5 }
+hate = { reject = 0.8, review = 0.5 }
+illegal = { reject = 0.8, review = 0.5 }
+unethical = { reject = 0.8, review = 0.5 }
+self_harm = { review = 0.5 }
+pii_email = { review = 1.0 }
+pii_phone = { review = 1.0 }
+pii_iban = { reject = 1.0 }
+pii_card = { reject = 1.0 }
+messaging_handoff = { review = 1.0 }
+spam = { review = 1.0 }
+scam = { review = 1.0 }
+
+# A nudity-only workflow, e.g. for profile pictures.
+[workflows.nudity_only.image]
+nudity = { reject = 0.8, review = 0.5 }
+
+# Everything an events platform usually screens, strict.
+[workflows.strict.image]
+nudity = { reject = 0.6, review = 0.4 }
+suggestive = { review = 0.5 }
+gore = { reject = 0.6, review = 0.4 }
+violence = { review = 0.5 }
+weapon = { reject = 0.6, review = 0.4 }
+drugs = { reject = 0.6, review = 0.4 }
+alcohol = { review = 0.5 }
+smoking = { review = 0.5 }
+hate_symbol = { reject = 0.6, review = 0.4 }
+offensive_gesture = { review = 0.5 }
+
+[workflows.strict.text]
+text_unsafe = { reject = 0.6, review = 0.4 }
+violence = { reject = 0.6, review = 0.4 }
+sexual = { reject = 0.6, review = 0.4 }
+hate = { reject = 0.6, review = 0.4 }
+illegal = { reject = 0.6, review = 0.4 }
+unethical = { reject = 0.6, review = 0.4 }
+self_harm = { review = 0.4 }
+child_safety = { review = 0.4 }
+privacy = { review = 0.4 }
+pii = { review = 0.4 }
+pii_email = { reject = 1.0 }
+pii_phone = { reject = 1.0 }
+pii_iban = { reject = 1.0 }
+pii_card = { reject = 1.0 }
+link = { review = 1.0 }
+messaging_handoff = { reject = 1.0 }
+spam = { reject = 1.0 }
+scam = { reject = 1.0 }
+profanity = { review = 1.0 }

@@ -1,0 +1,68 @@
+s|-|e|Line-up de malade samedi : trois salles, huit DJs et un système son qui va te défoncer les oreilles, dans le bon sens.
+s|-|c|Ce set était une bombe, le drop de deux heures du mat a fait exploser toute la salle.
+s|-|e|Shots au bar : deux pour le prix d'un jusqu'à minuit. Viens avec tes potes et un gobelet réutilisable.
+s|-|c|Une techno qui déchire tout. Je me remets encore de la nuit dernière.
+s|-|b|DJ bruxellois et chineur de vinyles. Je joue fort, surtout de l'acid et de l'electro. Résident aux soirées Entrepôt.
+s|-|e|Ouverture des portes à 22h, dernière entrée à 3h. Vestiaire 2 euros. Pas de sortie-retour après 4h.
+s|-|c|Ce festival était dingue, le meilleur week-end de ma vie, je suis crevé et heureux.
+s|-|c|Sa voix m'a tué, j'ai pleuré pendant le rappel. Incroyable.
+s|-|e|Open air sur le vieux port : smash burgers, bière artisanale et un closing par une légende. Prévoyez un k-way.
+s|-|c|La basse m'a explosé la poitrine, en bien. Ça vibre encore.
+s|-|b|Organisatrice, maman de deux enfants et grande fan de jeux de mots pourris. Écrivez-moi pour les bookings.
+s|-|e|Entrée gratuite avant 23h avec la guest list. Envoie-nous un message sur l'app pour y être.
+s|-|c|Complet en dix minutes ?! Vous êtes fous, je suis dégoûté d'avoir raté ça.
+s|-|e|N'oubliez pas vos bouchons d'oreilles : le set du headliner est violent, un vrai mur du son.
+s|-|h|Salut, tu vends encore la deuxième place ? Je peux payer par virement via l'app.
+s|-|c|L'équipe du bar était d'une rapidité de dingue, on a eu nos verres en 30 secondes. Respect.
+s|-|e|Notre soirée est un safe space : tolérance zéro pour le harcèlement. Parlez à un membre de l'équipe au moindre souci.
+s|-|c|Soirée de ouf, une vraie tuerie. J'ai dansé jusqu'à ne plus sentir mes pieds.
+s|-|e|Atelier : mixer du vinyle pour débutants. Apportez un casque, douze personnes maximum.
+s|-|c|Le videur était un chef, il a aidé mon amie qui se sentait mal. Merci !
+s|-|b|Batteur le jour, producteur de chambre la nuit. Influences : Justice, Daft Punk et le chat du voisin.
+s|-|h|Tu joues à quelle heure ? Je viens défoncer la piste avec vous, tout devant.
+s|-|e|After sur le toit : set au lever du soleil, pancakes vegan et une très bonne machine à café.
+s|-|c|La photo de la soirée va à la photographe qui a capté l'explosion de confettis au moment parfait.
+s|-|e|Line-up dévoilé : 12 artistes, 3 scènes, 1 prairie. Il reste des billets camping, tentes en location.
+s|-|c|Ce son est de la bombe, c'est un truc de ouf, grave kiffé !
+r|drugs|c|Quelqu'un sait où trouver de la MD en ville ? C'est juste pour le week-end, je ne cherche pas d'ennuis.
+r|violence|c|Si le DJ remet ce morceau, je pète un câble et je casse tout.
+r|harassment|c|Franchement le public d'hier, que des abrutis, la moitié ne savait même pas danser.
+r|sexual|e|Soirée yoga naturiste et body painting, 18+ uniquement, atelier sur le consentement à 21h. Photos interdites.
+r|scam|c|Je vends deux billets sous le prix, écris-moi sur WhatsApp pour un deal rapide, paiement d'abord svp.
+r|hate|c|Ces touristes de l'est ruinent toujours les clubs, tellement bruyants et radins.
+r|drugs|b|La microdose est mon sujet de recherche et la techno ma passion. Demandez-moi mon protocole.
+r|harassment|h|Tu étais canon hier, donne-moi ton numéro, je n'accepterai pas un non :)
+r|self_harm|c|Cette semaine était tellement nulle que j'ai juste envie de disparaître un moment. Je vais au festival pour oublier.
+r|violence|e|Fight night au club : combats de boxe amateur sur le ring, 18+ avec décharge signée.
+x|harassment,hate|c|T'es un déchet sans valeur et tout le monde ici te déteste, retourne d'où tu viens.
+x|harassment|c|T'es qu'une grosse pute débile, personne ne veut de toi à cette soirée, supprime ton compte.
+x|hate|c|Ces p*dés ne devraient pas avoir le droit d'organiser une soirée dans cette ville.
+x|hate|c|Sales n*gres, dehors de notre club.
+x|violence|h|Je sais où tu habites. Viens au concert demain et je te casse les jambes.
+x|violence|c|Quelqu'un devrait planter l'organisateur. J'apporte le couteau moi-même.
+x|sexual|h|Que des filles sexy : envoie des nudes et je te mets sur la liste VIP. Photos privées, cam show 18+, lien en bio.
+x|sexual|b|Escort disponible ce soir près de chez vous, service complet, déplacement possible, écrivez pour les tarifs.
+x|self_harm|c|Je n'en peux plus. Je vais me suicider cette nuit, personne ne le remarquera de toute façon.
+x|drugs|h|DM pour des pilules. MDMA, kétamine, coke, livraison jusqu'au club. Meilleurs prix, discret.
+x|drugs|b|Vend xanax, molly et weed. Telegram @plugparis, remise sur les quantités.
+x|scam|c|Doublez vos cryptos en 24h ! Envoyez 0,1 BTC et recevez 0,2, garanti : http://btc-doubler.example-scam.xyz
+x|scam|h|Votre commande de billets a échoué. Vérifiez votre carte ici sinon elle sera annulée : http://fest-billets-securise.example-phish.com/login
+x|scam|c|Places VIP gratuites pour les Nuits Botanique ! Partage ce post et saisis tes identifiants bancaires sur bit.ly/vip-gratuit-xx
+x|pii|c|Appelez l'organisateur au +33 6 12 34 56 78 sinon il gardera votre caution.
+x|pii|h|Mon adresse : 12 rue de la Paix, 75002 Paris. Passe après le concert, et mon IBAN pour le cash : FR14 2004 1010 0505 0001 3M02 606.
+x|pii|c|Son mail est jean.dupont.prive@example.com et son numéro 06 98 76 54 32, spammez-le.
+x|spam|c|ACHETEZ MAINTENANT !!! ACHETEZ MAINTENANT !!! ACHETEZ MAINTENANT !!! cliquez ici cliquez ici cliquez ici
+x|spam|c|follow4follow follow4follow followers pas chers 1000 pour 5 euros follow4follow follow4follow
+x|illegal|h|Fausses cartes d'identité à vendre, passent toutes les portes de clubs, aussi faux bracelets et faux billets.
+x|illegal|c|Qui veut des téléphones volés au vestiaire ? Moitié prix, sans poser de questions.
+x|harassment|c|Casse-toi sale looser moche, ton set était nul à chier et ta mère a honte de toi.
+x|hate,harassment|c|Retournez dans votre pays, sales immigrés, vous ruinez cette scène.
+x|violence,hate|h|On devrait cramer ce bar-mosquée avec tous ceux qui sont dedans.
+x|sexual|c|Montre tes seins dans la foule, je paie 50 euros, écris-moi, je sais où tu seras.
+x|drugs|e|Soirée privée : LSD, MDMA et cocaïne au menu, paiement cash à l'entrée, n'en parlez à personne.
+x|scam|h|Je suis un prince et j'ai besoin de votre aide pour transférer 5 millions, envoyez passeport et RIB pour 10 pour cent.
+s|-|c|Mec, ce dr0p était trop f0u, j'ai encore les oreilles qui sifflent mdr
+x|harassment|c|t 'e s  u n e  s a l 0 p e  d é b i l e,  s u i c i d e - t o i
+x|drugs|h|D M  p o u r  p i l u l e s - x t c, 3 m m c, livraison rapide
+r|harassment|c|haha t'es un clown 🤡🤡 apprends à mixer avant de gâcher la prochaine soirée
+x|violence|c|je vais te t u e r 🔪🔪🔪 on se voit à l'entrée
