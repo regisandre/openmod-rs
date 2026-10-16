@@ -3,6 +3,18 @@
 > Status: maintained with every release.
 > Last checked: 2026-10-16
 
+## 0.5.0 - 2026-10-16
+
+- **Removed** `model_sessions` and the per-model `sessions` of 0.4.0.
+  Loading each model several times gave 3.2 images a second instead of 3.0
+  on the test machine, for 3.5 times the memory: the machine saturates
+  before the models do. A configuration that sets either is refused; drop
+  the line.
+- Kept: a check that panics no longer stops its model. Its lock is taken
+  over by the next check instead of failing every check after it.
+- README: a [Sizing](README.md#sizing) section, the CPU and memory to plan
+  for a given flow of images and texts.
+
 ## 0.4.0 - 2026-10-16
 
 - **Model sessions**: `model_sessions` (default 1, at most `max_concurrent`)

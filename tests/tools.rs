@@ -83,55 +83,6 @@ fn a_disabled_tool_costs_no_memory_and_the_rules_cost_nothing_extra() {
 }
 
 #[test]
-fn each_session_past_the_first_costs_every_loaded_model_again() {
-    let estimate = |sessions: usize, concurrent: usize| {
-        let mut config = config_without(&["gliguard", "qwen3guard"]);
-        config.server.model_sessions = sessions;
-        config.server.max_concurrent = concurrent;
-        tools::estimate_mb(&config)
-    };
-    let one = estimate(1, 4);
-    // QR codes and domain lists are loaded once whatever the sessions.
-    let per_session: u32 = ["marqo_nsfw", "owen_safety", "siglip", "ocr"]
-        .iter()
-        .map(|id| tools::find(id).unwrap().session_mb)
-        .sum();
-    assert!(per_session > 0, "a model session costs memory");
-    // (case, model_sessions, max_concurrent, expected estimate)
-    let cases: Vec<(&str, usize, usize, u32)> = vec![
-        ("one session", 1, 4, one),
-        ("two", 2, 4, one + per_session),
-        ("four", 4, 4, one + 3 * per_session),
-        ("more than the checks at once", 8, 2, one + per_session),
-    ];
-    for (case, sessions, concurrent, expected) in cases {
-        assert_eq!(estimate(sessions, concurrent), expected, "{case}");
-    }
-
-    // A model's own `sessions` counts for it alone: the text models kept at
-    // one session cost nothing more when the others get two.
-    let text_once = DEFAULT_CONFIG
-        .replace(
-            "[models.gliguard]\nkind = \"text_classifier\"\n",
-            "[models.gliguard]\nkind = \"text_classifier\"\nsessions = 1\n",
-        )
-        .replace(
-            "[models.qwen3guard]\nkind = \"text_guard\"\n",
-            "[models.qwen3guard]\nkind = \"text_guard\"\nsessions = 1\n",
-        );
-    assert_eq!(text_once.matches("\nsessions = 1\n").count(), 2, "both set");
-    let mut everything = Config::parse(&text_once, Path::new(".")).unwrap();
-    let single = tools::estimate_mb(&everything);
-    everything.server.model_sessions = 2;
-    everything.server.max_concurrent = 2;
-    assert_eq!(
-        tools::estimate_mb(&everything),
-        single + per_session,
-        "two sessions, the text models once"
-    );
-}
-
-#[test]
 fn a_model_file_counts_as_present_only_with_its_expected_size_a_list_when_not_empty() {
     let dir = scratch("presence");
     let known = tools::file("owen-safety-xs.onnx").unwrap();

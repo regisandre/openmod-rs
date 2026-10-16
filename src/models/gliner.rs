@@ -13,14 +13,13 @@
 
 use crate::config::GlinerTask;
 use crate::decision::Score;
-use crate::models::onnx::{Runtime, open_sessions};
-use crate::pool::Pool;
+use crate::models::onnx::{Runtime, lock, open_session};
 use anyhow::{Result, anyhow, bail};
 use ort::session::Session;
 use ort::value::Tensor;
 use regex::Regex;
 use std::path::Path;
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Mutex};
 use tokenizers::Tokenizer;
 
 /// The encoder sees at most 512 tokens.
@@ -75,7 +74,7 @@ pub fn schema_pieces(tasks: &[GlinerTask]) -> Vec<String> {
 
 pub struct Gliner {
     name: String,
-    sessions: Pool<Session>,
+    session: Mutex<Session>,
     tokenizer: Tokenizer,
     tasks: Vec<GlinerTask>,
     prefix_ids: Vec<i64>,
@@ -127,7 +126,7 @@ impl Gliner {
         }
         Ok(Gliner {
             name: name.to_string(),
-            sessions: open_sessions(path, rt)?,
+            session: Mutex::new(open_session(path, rt)?),
             tokenizer: tok,
             tasks,
             prefix_ids,
@@ -160,7 +159,7 @@ impl Gliner {
         let input = Tensor::from_array(([1usize, ids.len()], ids))?;
         let positions =
             Tensor::from_array(([self.label_positions.len()], self.label_positions.clone()))?;
-        let mut session = self.sessions.get();
+        let mut session = lock(&self.session);
         let outputs = session.run(ort::inputs!["input_ids" => input, "positions" => positions])?;
         let (_, data) = outputs["logits"].try_extract_tensor::<f32>()?;
         Ok(data.to_vec())

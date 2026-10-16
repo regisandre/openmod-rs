@@ -56,11 +56,6 @@ pub struct Server {
     pub max_concurrent: usize,
     /// CPU threads each ONNX model may use.
     pub threads_per_model: usize,
-    /// How many checks may run the same model at once: each ONNX model is
-    /// loaded this many times, at most `max_concurrent`, unless its own
-    /// `sessions` says otherwise. Every session past the first holds
-    /// another copy of the model in memory.
-    pub model_sessions: usize,
     /// File holding one API key per line. `OPENMOD_API_KEYS` (comma
     /// separated) is read as well.
     pub api_keys_file: Option<PathBuf>,
@@ -83,7 +78,6 @@ impl Default for Server {
             max_text_chars: 20_000,
             max_concurrent: 2,
             threads_per_model: 2,
-            model_sessions: 1,
             api_keys_file: None,
             allow_unauthenticated: false,
             state_file: PathBuf::from("openmod-state.toml"),
@@ -118,10 +112,6 @@ pub struct ModelEntry {
     /// that need it are reported as `unchecked` instead of failing.
     #[serde(default = "enabled_by_default")]
     pub enabled: bool,
-    /// How many checks may run this model at once, instead of the server's
-    /// `model_sessions`. An ONNX model only.
-    #[serde(default)]
-    pub sessions: Option<usize>,
     #[serde(flatten)]
     pub spec: ModelSpec,
 }
@@ -286,7 +276,6 @@ pub fn read_category(reader: Reader, category: &str) -> String {
 }
 
 /// The settings each model kind accepts, besides `kind` and `enabled`.
-/// Every ONNX kind takes `sessions` too.
 const MODEL_KEYS: &[(&str, &[&str])] = &[
     (
         "image_classifier",
@@ -301,7 +290,6 @@ const MODEL_KEYS: &[(&str, &[&str])] = &[
             "classes",
             "categories",
             "softmax",
-            "sessions",
         ],
     ),
     (
@@ -319,16 +307,12 @@ const MODEL_KEYS: &[(&str, &[&str])] = &[
             "logit_scale",
             "logit_bias",
             "concepts",
-            "sessions",
         ],
     ),
-    (
-        "text_guard",
-        &["path", "tokenizer", "second_opinion", "sessions"],
-    ),
+    ("text_guard", &["path", "tokenizer", "second_opinion"]),
     (
         "text_classifier",
-        &["path", "tokenizer", "tasks", "second_opinion", "sessions"],
+        &["path", "tokenizer", "tasks", "second_opinion"],
     ),
     (
         "domain_list",
@@ -343,7 +327,6 @@ const MODEL_KEYS: &[(&str, &[&str])] = &[
             "dictionary",
             "max_side",
             "min_score",
-            "sessions",
         ],
     ),
 ];
@@ -649,17 +632,6 @@ impl Config {
             fix(p);
         }
         fix(&mut self.server.state_file);
-    }
-
-    /// The sessions loaded for `model`: its own `sessions`, else the
-    /// server's `model_sessions`, never more than the checks that run at
-    /// once, never none.
-    pub fn sessions(&self, model: &str) -> usize {
-        self.models
-            .get(model)
-            .and_then(|e| e.sessions)
-            .unwrap_or(self.server.model_sessions)
-            .clamp(1, self.server.max_concurrent.max(1))
     }
 
     /// Every category some tool of this kind can score, enabled or not,

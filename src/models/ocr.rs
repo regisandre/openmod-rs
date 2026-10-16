@@ -14,8 +14,7 @@
 //!   dropped, is the text, and the mean probability of its characters is
 //!   its confidence.
 
-use crate::models::onnx::{Runtime, open_sessions};
-use crate::pool::Pool;
+use crate::models::onnx::{Runtime, lock, open_session};
 use anyhow::{Result, anyhow, bail};
 use image::imageops::FilterType;
 use image::{Rgb, RgbImage};
@@ -23,6 +22,7 @@ use ort::session::Session;
 use ort::value::Tensor;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Mutex;
 
 const BIN_THRESHOLD: f32 = 0.3;
 const BOX_THRESHOLD: f32 = 0.6;
@@ -381,8 +381,8 @@ pub fn ctc_decode(probs: &[f32], classes: usize, dict: &[String]) -> (String, f3
 
 pub struct Ocr {
     name: String,
-    detector: Pool<Session>,
-    recognizer: Pool<Session>,
+    detector: Mutex<Session>,
+    recognizer: Mutex<Session>,
     dictionary: Vec<String>,
     max_side: u32,
     min_score: f32,
@@ -402,8 +402,8 @@ impl Ocr {
             .map_err(|e| anyhow!("reading {}: {e}", dictionary.display()))?;
         Ok(Ocr {
             name: name.to_string(),
-            detector: open_sessions(detector, rt)?,
-            recognizer: open_sessions(recognizer, rt)?,
+            detector: Mutex::new(open_session(detector, rt)?),
+            recognizer: Mutex::new(open_session(recognizer, rt)?),
             dictionary: parse_dictionary(&yml)?,
             max_side,
             min_score,
@@ -423,7 +423,7 @@ impl Ocr {
             }
         }
         let tensor = Tensor::from_array(([1usize, 3, dh as usize, dw as usize], data))?;
-        let mut session = self.detector.get();
+        let mut session = lock(&self.detector);
         let input = session.inputs()[0].name().to_string();
         let outputs = session.run(ort::inputs![input => tensor])?;
         let (_, map) = outputs[0].try_extract_tensor::<f32>()?;
@@ -465,7 +465,7 @@ impl Ocr {
                 }
             }
             let tensor = Tensor::from_array(([batch.len(), 3, height, width as usize], data))?;
-            let mut session = self.recognizer.get();
+            let mut session = lock(&self.recognizer);
             let input = session.inputs()[0].name().to_string();
             let outputs = session.run(ort::inputs![input => tensor])?;
             let (shape, probs) = outputs[0].try_extract_tensor::<f32>()?;

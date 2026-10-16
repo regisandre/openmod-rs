@@ -11,12 +11,12 @@
 
 use crate::config::TEXT_GUARD_CATEGORIES;
 use crate::decision::Score;
-use crate::models::onnx::{Runtime, open_sessions};
-use crate::pool::Pool;
+use crate::models::onnx::{Runtime, lock, open_session};
 use anyhow::{Result, anyhow, bail};
 use ort::session::Session;
 use ort::value::Tensor;
 use std::path::Path;
+use std::sync::Mutex;
 use tokenizers::Tokenizer;
 
 /// Everything after the user text, up to the label. Must match the chat
@@ -30,7 +30,7 @@ const CHUNK_CHARS: usize = 1500;
 
 pub struct TextGuard {
     name: String,
-    sessions: Pool<Session>,
+    session: Mutex<Session>,
     tokenizer: Tokenizer,
     /// Strings the tokenizer treats as control tokens; user text must never
     /// contain them verbatim.
@@ -142,7 +142,7 @@ impl TextGuard {
             .collect();
         Ok(TextGuard {
             name: name.to_string(),
-            sessions: open_sessions(path, rt)?,
+            session: Mutex::new(open_session(path, rt)?),
             tail_ids: encode(&tok, PROMPT_TAIL)?,
             probe_ids: encode(&tok, CATEGORY_PROBE)?,
             tokenizer: tok,
@@ -168,7 +168,7 @@ impl TextGuard {
             ids.iter().map(|&i| i as i64).collect::<Vec<_>>(),
         ))?;
         let positions = Tensor::from_array(([2usize], vec![label_pos as i64, last as i64]))?;
-        let mut session = self.sessions.get();
+        let mut session = lock(&self.session);
         let outputs = session.run(ort::inputs!["input_ids" => input, "positions" => positions])?;
         let (shape, data) = outputs["logits"].try_extract_tensor::<f32>()?;
         let vocab = shape[1] as usize;

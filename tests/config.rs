@@ -405,34 +405,6 @@ fn a_second_opinion_without_its_first_pass_runs_on_every_text() {
 }
 
 #[test]
-fn a_model_never_has_more_sessions_than_checks_that_run_at_once() {
-    // (case, max_concurrent, model_sessions, the model's own `sessions`, loaded)
-    let cases: Vec<(&str, usize, usize, Option<usize>, usize)> = vec![
-        ("the default", 2, 1, None, 1),
-        ("one per check", 4, 4, None, 4),
-        ("more than the checks", 2, 8, None, 2),
-        ("none asked", 2, 0, None, 1),
-        ("no check limit set", 0, 3, None, 1),
-        ("the model's own setting wins", 4, 4, Some(1), 1),
-        ("and is capped the same way", 2, 1, Some(8), 2),
-    ];
-    for (case, concurrent, sessions, own, expected) in cases {
-        let models = match own {
-            Some(n) => TEXT_MODELS.replace(
-                "kind = \"text_guard\"\n",
-                &format!("kind = \"text_guard\"\nsessions = {n}\n"),
-            ),
-            None => TEXT_MODELS.to_string(),
-        };
-        let config = parse(&format!(
-            "[server]\nmax_concurrent = {concurrent}\nmodel_sessions = {sessions}\n{models}"
-        ))
-        .unwrap();
-        assert_eq!(config.sessions("qwen"), expected, "{case}");
-    }
-}
-
-#[test]
 fn every_category_of_the_default_config_has_its_own_title_and_message() {
     let config = parse(DEFAULT_CONFIG).unwrap();
     let catalog = openmod::catalog::Catalog::builtin();

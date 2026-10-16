@@ -26,7 +26,7 @@ endpoints, and a small admin interface to choose what runs.
   id, a title, a sentence you can show your users, the score and the
   threshold it crossed.
 - **Pay only for what you load**: turn each tool on or off; a tool that is
-  off uses no memory. From 19 MB (text rules only) to 1.75 GB (everything).
+  off uses no memory. From 11 MB (text rules only) to 1.74 GB (everything).
 
 **Contents**: [Quick start](#quick-start) |
 [Install](#install) |
@@ -38,6 +38,7 @@ endpoints, and a small admin interface to choose what runs.
 [Command line](#command-line) |
 [How it works](#how-it-works) |
 [Results](#results) |
+[Sizing](#sizing) |
 [Calibration](#calibration) |
 [Security](#security) |
 [Limitations](#limitations) |
@@ -562,7 +563,6 @@ max_image_pixels = 50_000_000     # decoded width x height
 max_text_chars = 20_000
 max_concurrent = 2                # checks running inference at once
 threads_per_model = 2             # CPU threads per ONNX model
-model_sessions = 1                # checks running one model at once, see Model sessions
 # api_keys_file = "/etc/openmod/keys"   # one key per line
 allow_unauthenticated = false     # loopback only
 state_file = "openmod-state.toml" # admin token and API key digests
@@ -598,32 +598,6 @@ nudity = "mean"
 
 The models, workflows and labels reload from the admin interface. The
 `[server]` and `[admin]` settings take effect at restart.
-
-### Model sessions
-
-An ONNX Runtime session runs one call at a time, so by default two checks
-that need the same model take turns. `model_sessions` loads each ONNX model
-that many times, at most `max_concurrent`, so that as many checks run it at
-once; a model's own `sessions` overrides it:
-
-```toml
-[server]
-max_concurrent = 8
-model_sessions = 8
-
-[models.qwen3guard]
-kind = "text_guard"
-sessions = 2   # consulted on risky texts only: fewer copies of 515 MB
-```
-
-Each session past the first is another copy of the model: about 175 MB at
-rest for the image models and the OCR together, 450 MB once checks have run
-through it, 500 MB for GLiGuard and 515 MB for Qwen3Guard. The CPU limit
-does not move: at most `max_concurrent` checks run, each on
-`threads_per_model` threads. Raise it on a machine with idle cores only,
-and measure: see [Results](#results), where the laptop saturates first. A
-session also comes back when its check panics, so one bad image never
-stops a model.
 
 ## Command line
 
@@ -837,15 +811,56 @@ for the images, the own corpus for the texts:
 | texts, rules and lists | 16, 1 | 12,400 | 4.7 cores | 0.4 ms | 0.5 GB |
 
 About three images a second is what this laptop gives with the OCR on,
-however the work is split: more threads, `model_sessions = 8` (3.2 a second
-on 12 cores, 4.2 GB), or two servers side by side (3.2 together) all stop
-there, and the CPU per check grows with every core added. A machine with
-more cores, and cores that keep their speed under load, goes further.
+however the work is split: more threads, each model loaded eight times
+(tried in 0.4: 3.2 a second on 12 cores and 4.2 GB, so removed again), or
+two servers side by side (3.2 together) all stop there, and the CPU per
+check grows with every core added. A machine with more cores, and cores
+that keep their speed under load, goes further.
 
 Qwen3Guard only runs on texts GLiGuard finds risky, three in five in the
 own corpus: on everyday content it costs much less. A server under load holds more than the peaks
 of [Choose what to load](#choose-what-to-load): the images being decoded,
 the ones waiting their turn, and the buffers ONNX Runtime keeps for them.
+
+## Sizing
+
+What a server needs, from the measurements in [Results](#results). A
+check's CPU time was measured one at a time on a laptop core; a server core
+runs a check about 1.3 times faster, and with every core busy each check
+costs up to twice as much, as on the laptop. The tables plan between the
+two: load-test the machine you pick before a big launch.
+
+**Per check**, on one server core:
+
+| Check | CPU time | Memory of one server |
+|---|---|---|
+| an image, every image tool (OCR and QR included) | 1 to 2 s | 0.5 GB loaded, 1 to 1.2 GB with checks in flight |
+| an image, the image models only | 0.45 to 1 s | 0.5 to 0.6 GB |
+| a text, GLiGuard | 0.25 to 0.5 s | 1 GB |
+| a text, GLiGuard and Qwen3Guard | 0.35 to 1.3 s, more when many texts are risky | 1.6 GB |
+| a text, rules and lists | 0.4 ms | 50 MB, 0.5 GB at 10,000 a second |
+
+**For a steady flow**, CPU at 70%. One server handles about three images a
+second with every image tool on, about four with the image models only or
+with both text models, so the memory counts the servers a flow needs:
+
+| Flow | Images, every tool | Images, models only | Texts, both text models | Texts, rules and lists |
+|---|---|---|---|---|
+| 100 a minute | 3 to 5 vCPU, 2 GB | 2 vCPU, 1 GB | 1 to 3 vCPU, 2 GB | 1 vCPU, 0.5 GB |
+| 1,000 a minute | 24 to 48 vCPU, 8 GB | 11 to 24 vCPU, 3 GB | 8 to 31 vCPU, 7 GB | 1 vCPU, 0.5 GB |
+| 100 a second | 145 to 290 vCPU, 40 GB | 65 to 145 vCPU, 15 GB | 50 to 185 vCPU, 40 GB | 1 vCPU, 0.5 GB |
+| 1,000 a second | a GPU, not supported yet | 650 to 1,450 vCPU, 150 GB | 500 to 1,850 vCPU, 400 GB | 1 vCPU, 0.5 GB |
+
+- Past one server, run several behind a load balancer. Each loads its own
+  models, and `max_concurrent` times `threads_per_model` should stay near
+  the cores each one gets.
+- A check waits at most 30 s for its turn, then gets `503 busy`: size for
+  the peaks, not for the average.
+- Shared vCPU plans slow down under a steady load: take dedicated vCPU for
+  a constant flow.
+- Images are where the cost is, and the OCR is about half of it: a
+  workflow that names no `text_*` or `qr_*` category never runs the OCR or
+  the QR reader.
 
 ## Calibration
 
