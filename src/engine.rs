@@ -1,23 +1,27 @@
 //! Loads the enabled models once and runs only those a workflow needs.
 
 use crate::catalog::{Catalog, Label};
-use crate::config::{Config, ModelSpec, RULE_CATEGORIES, SecondOpinion};
+use crate::config::{Config, ModelSpec, QR_CODE, Reader, SecondOpinion, read_category};
 use crate::decision::{
     Score, Summary, average_opinions, best_scores, cap_to_verdict, combine_scores, evaluate,
 };
+use crate::domains::{DomainList, Suffixes};
 use crate::image_input::{DecodeError, decode};
 use crate::models::gliner::Gliner;
+use crate::models::ocr::Ocr;
 use crate::models::onnx::{Classifier, Runtime, ZeroShot};
 use crate::models::text_guard::TextGuard;
 use crate::normalize::deobfuscate;
 use crate::tools;
 use crate::workflow::{Unavailable, Workflow};
-use crate::{profanity, rules};
+use crate::{domains, extremism, profanity, qr, rules};
 use anyhow::{Result, bail};
+use image::RgbImage;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 enum ImageModel {
     Classifier(Classifier),
@@ -42,6 +46,23 @@ impl TextModel {
 enum Model {
     Image(Arc<ImageModel>),
     Text(Arc<TextModel>),
+    List(Arc<DomainList>),
+    Qr,
+    Ocr(Arc<Ocr>),
+}
+
+/// The size and modification time of each file a model reads: a domain list
+/// refreshed on disk is loaded again, even with the same settings.
+type Stamp = Vec<(u64, Option<SystemTime>)>;
+
+fn stamp(spec: &ModelSpec) -> Stamp {
+    spec.files()
+        .into_iter()
+        .map(|p: &Path| match std::fs::metadata(p) {
+            Ok(m) => (m.len(), m.modified().ok()),
+            Err(_) => (0, None),
+        })
+        .collect()
 }
 
 /// A loaded model, with the settings it was loaded with so a reload can
@@ -50,6 +71,7 @@ enum Model {
 struct Slot {
     name: String,
     spec: ModelSpec,
+    stamp: Stamp,
     model: Model,
     categories: BTreeSet<String>,
     second_opinion: Option<SecondOpinion>,
@@ -79,6 +101,8 @@ pub struct Engine {
     pub status: BTreeMap<String, ToolStatus>,
     image_available: BTreeSet<String>,
     text_available: BTreeSet<String>,
+    /// Image category -> (reader, text category), for the ready readers.
+    derived: BTreeMap<String, (String, String)>,
 }
 
 #[derive(Debug, Serialize)]
@@ -152,6 +176,35 @@ fn load_model(name: &str, spec: &ModelSpec, rt: Runtime) -> Result<Model> {
         } => Model::Text(Arc::new(TextModel::Gliner(Gliner::load(
             name, &path, &tokenizer, tasks, rt,
         )?))),
+        ModelSpec::DomainList {
+            paths,
+            public_suffixes,
+            allow,
+            ..
+        } => {
+            let list = DomainList::load(&paths, &Suffixes::load(&public_suffixes)?)?.allow(&allow);
+            if list.is_empty() {
+                bail!("{name}: its lists hold no domain");
+            }
+            tracing::info!(model = %name, domains = list.len(), "domain list loaded");
+            Model::List(Arc::new(list))
+        }
+        ModelSpec::QrReader {} => Model::Qr,
+        ModelSpec::ImageOcr {
+            detector,
+            recognizer,
+            dictionary,
+            max_side,
+            min_score,
+        } => Model::Ocr(Arc::new(Ocr::load(
+            name,
+            &detector,
+            &recognizer,
+            &dictionary,
+            max_side,
+            min_score,
+            rt,
+        )?)),
     })
 }
 
@@ -182,12 +235,13 @@ impl Engine {
                 status.insert(name.clone(), ToolStatus::Missing { files: missing });
                 continue;
             }
+            let files = stamp(&entry.spec);
             let kept = previous
                 .filter(|p| p.threads == threads)
                 .and_then(|p| {
                     p.slots
                         .iter()
-                        .find(|s| s.name == *name && s.spec == entry.spec)
+                        .find(|s| s.name == *name && s.spec == entry.spec && s.stamp == files)
                 })
                 .map(|s| s.model.clone());
             let model = match kept {
@@ -202,6 +256,7 @@ impl Engine {
                     slots.push(Slot {
                         name: name.clone(),
                         spec: entry.spec.clone(),
+                        stamp: files,
                         model,
                         categories: entry.spec.categories(),
                         second_opinion: None,
@@ -229,19 +284,11 @@ impl Engine {
                 slot.second_opinion = so;
             }
         }
-        let available = |image: bool| -> BTreeSet<String> {
-            let models = slots
-                .iter()
-                .filter(|s| matches!(s.model, Model::Image(_)) == image)
-                .flat_map(|s| s.categories.iter().cloned());
-            let rules = RULE_CATEGORIES
-                .iter()
-                .filter(|_| !image)
-                .map(|s| s.to_string());
-            models.chain(rules).collect()
-        };
-        let image_available = available(true);
-        let text_available = available(false);
+        let ready: BTreeSet<&str> = slots.iter().map(|s| s.name.as_str()).collect();
+        let keep = |name: &str, _: &crate::config::ModelEntry| ready.contains(name);
+        let image_available = config.categories_where(true, &keep);
+        let text_available = config.categories_where(false, &keep);
+        let derived = config.derived(&keep);
         let mut catalog = Catalog::builtin();
         for (id, l) in &config.labels {
             catalog.set(
@@ -260,6 +307,7 @@ impl Engine {
             status,
             image_available,
             text_available,
+            derived,
         };
         if engine
             .status
@@ -422,33 +470,127 @@ impl Engine {
         let wanted = |c: &str| wf.rules.contains_key(c);
         let mut scores = Vec::new();
         for slot in &self.slots {
-            let Model::Image(model) = &slot.model else {
-                continue;
-            };
-            if !slot.categories.iter().any(|c| wanted(c)) {
-                continue;
-            }
-            match model.as_ref() {
-                ImageModel::Classifier(c) => scores.extend(c.run(&img)?),
-                ImageModel::ZeroShot(z) => scores.extend(z.run(&img, &wanted)?),
+            match &slot.model {
+                Model::Image(model) if slot.categories.iter().any(|c| wanted(c)) => {
+                    match model.as_ref() {
+                        ImageModel::Classifier(c) => scores.extend(c.run(&img)?),
+                        ImageModel::ZeroShot(z) => scores.extend(z.run(&img, &wanted)?),
+                    }
+                }
+                Model::Qr | Model::Ocr(_) => scores.extend(self.read_image(slot, &img, &wanted)?),
+                _ => {}
             }
         }
         Ok(self.report(workflow, wf, scores, unchecked, start))
     }
 
-    /// Blocking: call from a worker thread.
-    pub fn check_text(&self, text: &str, workflow: &str) -> Result<Report, CheckError> {
-        let start = Instant::now();
-        let (wf, unchecked) = self.workflow(workflow, false)?;
-        let max = self.config.server.max_text_chars;
-        if text.chars().count() > max {
-            return Err(CheckError::TextTooLong(max));
+    /// What a reader finds in the image, checked like a text: each text
+    /// category the workflow wants from it comes back renamed for images
+    /// (`qr_link_adult`, `text_extremism`). A reader nothing is wanted from
+    /// does not run.
+    fn read_image(
+        &self,
+        slot: &Slot,
+        img: &RgbImage,
+        wanted: &dyn Fn(&str) -> bool,
+    ) -> Result<Vec<Score>, CheckError> {
+        let reader = match &slot.model {
+            Model::Qr => Reader::Qr,
+            Model::Ocr(_) => Reader::Ocr,
+            _ => return Ok(Vec::new()),
+        };
+        let bases: BTreeSet<&str> = self
+            .derived
+            .iter()
+            .filter(|(image, (from, _))| *from == slot.name && wanted(image))
+            .map(|(_, (_, text))| text.as_str())
+            .collect();
+        let wants_code = reader == Reader::Qr && wanted(QR_CODE);
+        if bases.is_empty() && !wants_code {
+            return Ok(Vec::new());
         }
-        let wanted = |c: &str| wf.rules.contains_key(c);
-        // Rules read the raw text; models read it with obfuscation undone.
+        let lines = match &slot.model {
+            Model::Ocr(ocr) => ocr.read(img)?,
+            _ => qr::read(img),
+        };
+        let mut out = Vec::new();
+        if wants_code && !lines.is_empty() {
+            out.push(Score {
+                category: QR_CODE.to_string(),
+                score: 1.0,
+                source: slot.name.clone(),
+            });
+        }
+        if lines.is_empty() || bases.is_empty() {
+            return Ok(out);
+        }
+        let max = self.config.server.max_text_chars;
+        let text: String = lines.join("\n").chars().take(max).collect();
+        let in_text = |c: &str| bases.contains(c);
+        let found = match reader {
+            Reader::Qr => self.rule_scores(&text, &deobfuscate(&text), &in_text),
+            Reader::Ocr => self.text_scores(&text, &in_text)?,
+        };
+        out.extend(
+            found
+                .into_iter()
+                .filter(|s| in_text(&s.category))
+                .map(|s| Score {
+                    category: read_category(reader, &s.category),
+                    score: s.score,
+                    source: format!("{}+{}", slot.name, s.source),
+                }),
+        );
+        Ok(out)
+    }
+
+    /// What the rules and the domain lists find in a text. The rules and the
+    /// links read the raw text, the word lists the deobfuscated one.
+    fn rule_scores(
+        &self,
+        text: &str,
+        model_text: &str,
+        wanted: &dyn Fn(&str) -> bool,
+    ) -> Vec<Score> {
         let mut scores = rules::scan(text);
+        scores.extend(profanity::scan(model_text));
+        scores.extend(extremism::scan(text, model_text));
+        let lists: Vec<(&Slot, &DomainList)> = self
+            .slots
+            .iter()
+            .filter_map(|s| match &s.model {
+                Model::List(list) if s.categories.iter().any(|c| wanted(c)) => {
+                    Some((s, list.as_ref()))
+                }
+                _ => None,
+            })
+            .collect();
+        if lists.is_empty() {
+            return scores;
+        }
+        let hosts = domains::hosts(text);
+        for (slot, list) in lists {
+            if hosts.iter().any(|h| list.contains(h)) {
+                scores.extend(slot.categories.iter().map(|c| Score {
+                    category: c.clone(),
+                    score: 1.0,
+                    source: slot.name.clone(),
+                }));
+            }
+        }
+        scores
+    }
+
+    /// Everything a text goes through: the rules, the domain lists, and the
+    /// text models that score a category the workflow wants.
+    fn text_scores(
+        &self,
+        text: &str,
+        wanted: &dyn Fn(&str) -> bool,
+    ) -> Result<Vec<Score>, CheckError> {
+        // Rules read the raw text; models read it with obfuscation undone.
         let model_text = deobfuscate(text);
-        scores.extend(profanity::scan(&model_text));
+        let mut scores = self.rule_scores(text, &model_text, wanted);
         let text_slots = || {
             self.slots.iter().filter_map(|s| match &s.model {
                 Model::Text(m) if s.categories.iter().any(|c| wanted(c)) => Some((s, m)),
@@ -473,6 +615,19 @@ impl Engine {
             }
         }
         scores.extend(cap_to_verdict(opinions, "text_unsafe"));
+        Ok(scores)
+    }
+
+    /// Blocking: call from a worker thread.
+    pub fn check_text(&self, text: &str, workflow: &str) -> Result<Report, CheckError> {
+        let start = Instant::now();
+        let (wf, unchecked) = self.workflow(workflow, false)?;
+        let max = self.config.server.max_text_chars;
+        if text.chars().count() > max {
+            return Err(CheckError::TextTooLong(max));
+        }
+        let wanted = |c: &str| wf.rules.contains_key(c);
+        let scores = self.text_scores(text, &wanted)?;
         Ok(self.report(workflow, wf, scores, unchecked, start))
     }
 }

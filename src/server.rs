@@ -356,6 +356,29 @@ async fn compat_text(
     ))
 }
 
+/// Downloads again the lists older than `hours` that changed upstream, then
+/// reloads the engine so the new lists count. Skipped while the admin
+/// interface downloads files.
+fn refresh_lists(app: &App, hours: u64) {
+    if app
+        .downloads
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .running
+    {
+        return;
+    }
+    let config = app.engine().config.clone();
+    if crate::download::refresh_lists(&config, Duration::from_secs(hours * 3600)) == 0 {
+        return;
+    }
+    let _one_at_a_time = app.edits.blocking_lock();
+    match Config::load(&app.config_path) {
+        Ok(config) => app.reload(config),
+        Err(e) => tracing::error!(error = %format!("{e:#}"), "reload after a list refresh failed"),
+    }
+}
+
 /// Resolves on Ctrl+C, and on SIGTERM where there is one (`docker stop`).
 async fn shutdown_signal() {
     #[cfg(unix)]
@@ -445,6 +468,22 @@ pub async fn serve(config_path: PathBuf, engine: Engine) -> Result<()> {
         sessions: Sessions::new(admin::SESSION_TTL),
         downloads: Mutex::new(Downloads::default()),
     });
+
+    let hours = config.server.lists_refresh_hours;
+    if hours > 0 {
+        let worker = app.clone();
+        tokio::spawn(async move {
+            // Hourly: each list is asked for again once it is older than
+            // `lists_refresh_hours`, so a restart never delays a refresh.
+            let mut tick = tokio::time::interval(Duration::from_secs(3600));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            loop {
+                tick.tick().await;
+                let app = worker.clone();
+                let _ = tokio::task::spawn_blocking(move || refresh_lists(&app, hours)).await;
+            }
+        });
+    }
 
     let api = Router::new()
         .route("/health", get(health))

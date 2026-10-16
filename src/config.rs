@@ -64,6 +64,9 @@ pub struct Server {
     /// Where openmod keeps the admin token and the API keys created in the
     /// admin interface, as SHA-256 digests only.
     pub state_file: PathBuf,
+    /// How often the domain lists are downloaded again, when they changed
+    /// upstream. 0 never refreshes them.
+    pub lists_refresh_hours: u64,
 }
 
 impl Default for Server {
@@ -78,6 +81,7 @@ impl Default for Server {
             api_keys_file: None,
             allow_unauthenticated: false,
             state_file: PathBuf::from("openmod-state.toml"),
+            lists_refresh_hours: 24,
         }
     }
 }
@@ -209,6 +213,66 @@ pub enum ModelSpec {
         #[serde(default)]
         second_opinion: Option<SecondOpinion>,
     },
+    /// Domain lists, one domain per line: a text that links to a listed site
+    /// scores `category`.
+    DomainList {
+        paths: Vec<PathBuf>,
+        /// The Public Suffix List, so that a listed public suffix never
+        /// covers the sites registered under it.
+        public_suffixes: PathBuf,
+        category: String,
+        /// Domains never flagged, with their subdomains, whatever the
+        /// lists say.
+        #[serde(default)]
+        allow: Vec<String>,
+    },
+    /// Reads the QR codes of an image. What they hold goes through the text
+    /// rules and the domain lists, and each category comes back with a
+    /// `qr_` prefix (`qr_link_adult`); `qr_code` is any code at all.
+    QrReader {},
+    /// PP-OCR: reads the text of an image. It goes through everything a text
+    /// goes through, and each category comes back with a `text_` prefix
+    /// (`text_link_adult`, `text_extremism`; `text_unsafe` stays as is).
+    ImageOcr {
+        detector: PathBuf,
+        recognizer: PathBuf,
+        dictionary: PathBuf,
+        /// The longer side the detector sees, in pixels.
+        #[serde(default = "ocr_max_side")]
+        max_side: u32,
+        /// The confidence a line needs to be kept.
+        #[serde(default = "ocr_min_score")]
+        min_score: f32,
+    },
+}
+
+fn ocr_max_side() -> u32 {
+    960
+}
+
+fn ocr_min_score() -> f32 {
+    0.5
+}
+
+/// What reads text out of an image.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reader {
+    Qr,
+    Ocr,
+}
+
+/// What a QR code holding anything at all scores.
+pub const QR_CODE: &str = "qr_code";
+
+/// The image category a reader gives a text category: `qr_link_adult` from
+/// a QR code, `text_link_adult` from the text of an image. A text category
+/// that already starts with `text_` keeps its name.
+pub fn read_category(reader: Reader, category: &str) -> String {
+    match reader {
+        Reader::Qr => format!("qr_{category}"),
+        Reader::Ocr if category.starts_with("text_") => category.to_string(),
+        Reader::Ocr => format!("text_{category}"),
+    }
 }
 
 /// The settings each model kind accepts, besides `kind` and `enabled`.
@@ -249,6 +313,21 @@ const MODEL_KEYS: &[(&str, &[&str])] = &[
     (
         "text_classifier",
         &["path", "tokenizer", "tasks", "second_opinion"],
+    ),
+    (
+        "domain_list",
+        &["paths", "public_suffixes", "category", "allow"],
+    ),
+    ("qr_reader", &[]),
+    (
+        "image_ocr",
+        &[
+            "detector",
+            "recognizer",
+            "dictionary",
+            "max_side",
+            "min_score",
+        ],
     ),
 ];
 
@@ -346,14 +425,41 @@ pub const RULE_CATEGORIES: &[&str] = &[
     "spam",
     "scam",
     "profanity",
+    "extremism",
 ];
 
 impl ModelSpec {
+    /// Whether the tool checks images: an image model or a reader.
     pub fn is_image(&self) -> bool {
         matches!(
             self,
-            ModelSpec::ImageClassifier { .. } | ModelSpec::ImageZeroShot { .. }
+            ModelSpec::ImageClassifier { .. }
+                | ModelSpec::ImageZeroShot { .. }
+                | ModelSpec::QrReader {}
+                | ModelSpec::ImageOcr { .. }
         )
+    }
+
+    /// Whether the tool is a text model (a domain list is not).
+    pub fn is_text_model(&self) -> bool {
+        matches!(
+            self,
+            ModelSpec::TextGuard { .. } | ModelSpec::TextClassifier { .. }
+        )
+    }
+
+    /// Whether the tool reads text out of images, and how.
+    pub fn reader(&self) -> Option<Reader> {
+        match self {
+            ModelSpec::QrReader {} => Some(Reader::Qr),
+            ModelSpec::ImageOcr { .. } => Some(Reader::Ocr),
+            _ => None,
+        }
+    }
+
+    /// Whether the tool runs on ONNX Runtime.
+    pub fn uses_onnx(&self) -> bool {
+        !matches!(self, ModelSpec::DomainList { .. } | ModelSpec::QrReader {})
     }
 
     /// The files the model reads.
@@ -374,6 +480,22 @@ impl ModelSpec {
             } => {
                 vec![path, tokenizer]
             }
+            ModelSpec::DomainList {
+                paths,
+                public_suffixes,
+                ..
+            } => paths
+                .iter()
+                .map(PathBuf::as_path)
+                .chain([public_suffixes.as_path()])
+                .collect(),
+            ModelSpec::QrReader {} => Vec::new(),
+            ModelSpec::ImageOcr {
+                detector,
+                recognizer,
+                dictionary,
+                ..
+            } => vec![detector, recognizer, dictionary],
         }
     }
 
@@ -385,7 +507,8 @@ impl ModelSpec {
         }
     }
 
-    /// Every category this model can score.
+    /// Every category this tool scores by itself. A reader also derives
+    /// categories from the text it reads: see `Config::derived`.
     pub fn categories(&self) -> BTreeSet<String> {
         match self {
             ModelSpec::ImageClassifier { categories, .. } => categories.values().cloned().collect(),
@@ -399,6 +522,9 @@ impl ModelSpec {
                 .iter()
                 .flat_map(|t| t.categories.values().cloned())
                 .collect(),
+            ModelSpec::DomainList { category, .. } => BTreeSet::from([category.clone()]),
+            ModelSpec::QrReader {} => BTreeSet::from([QR_CODE.to_string()]),
+            ModelSpec::ImageOcr { .. } => BTreeSet::new(),
         }
     }
 }
@@ -481,6 +607,25 @@ impl Config {
                     fix(path);
                     fix(tokenizer);
                 }
+                ModelSpec::DomainList {
+                    paths,
+                    public_suffixes,
+                    ..
+                } => {
+                    paths.iter_mut().for_each(fix);
+                    fix(public_suffixes);
+                }
+                ModelSpec::QrReader {} => {}
+                ModelSpec::ImageOcr {
+                    detector,
+                    recognizer,
+                    dictionary,
+                    ..
+                } => {
+                    fix(detector);
+                    fix(recognizer);
+                    fix(dictionary);
+                }
             }
         }
         if let Some(p) = self.server.api_keys_file.as_mut() {
@@ -489,37 +634,97 @@ impl Config {
         fix(&mut self.server.state_file);
     }
 
-    /// Every category some model of this kind can score, enabled or not,
-    /// plus the rules for text.
+    /// Every category some tool of this kind can score, enabled or not,
+    /// plus the rules for text and what the readers derive for images.
     pub fn known_categories(&self, image: bool) -> BTreeSet<String> {
-        self.categories(image, |_| true)
+        self.categories_where(image, &|_, _| true)
     }
 
-    /// The categories the enabled models (and the text rules) can score.
+    /// The categories the enabled tools (and the text rules) can score.
     pub fn available_categories(&self, image: bool) -> BTreeSet<String> {
-        self.categories(image, |e| e.enabled)
+        self.categories_where(image, &|_, e| e.enabled)
     }
 
-    fn categories(&self, image: bool, keep: impl Fn(&ModelEntry) -> bool) -> BTreeSet<String> {
-        let models = self
+    /// The categories the tools `keep` accepts can score.
+    pub fn categories_where(
+        &self,
+        image: bool,
+        keep: &dyn Fn(&str, &ModelEntry) -> bool,
+    ) -> BTreeSet<String> {
+        if !image {
+            return self.text_categories(keep, true);
+        }
+        let mut out: BTreeSet<String> = self
             .models
-            .values()
-            .filter(|e| e.spec.is_image() == image && keep(e))
-            .flat_map(|e| e.spec.categories());
-        let rules = RULE_CATEGORIES
             .iter()
-            .filter(|_| !image)
-            .map(|s| s.to_string());
-        models.chain(rules).collect()
+            .filter(|(name, e)| e.spec.is_image() && keep(name, e))
+            .flat_map(|(_, e)| e.spec.categories())
+            .collect();
+        out.extend(self.derived(keep).into_keys());
+        out
     }
 
-    /// The models that can score `category`, enabled or not.
+    /// The text categories: the rules', plus those of the kept domain lists
+    /// and, with `models`, of the kept text models.
+    fn text_categories(
+        &self,
+        keep: &dyn Fn(&str, &ModelEntry) -> bool,
+        models: bool,
+    ) -> BTreeSet<String> {
+        let tools = self
+            .models
+            .iter()
+            .filter(|(name, e)| {
+                keep(name, e)
+                    && (matches!(e.spec, ModelSpec::DomainList { .. })
+                        || (models && e.spec.is_text_model()))
+            })
+            .flat_map(|(_, e)| e.spec.categories());
+        RULE_CATEGORIES
+            .iter()
+            .map(|s| s.to_string())
+            .chain(tools)
+            .collect()
+    }
+
+    /// Every image category a kept reader derives from a text category, with
+    /// the reader and the text category. A QR code goes through the rules and
+    /// the domain lists, the text of an image through the text models too.
+    pub fn derived(
+        &self,
+        keep: &dyn Fn(&str, &ModelEntry) -> bool,
+    ) -> BTreeMap<String, (String, String)> {
+        let mut out = BTreeMap::new();
+        for (name, e) in &self.models {
+            let Some(reader) = e.spec.reader().filter(|_| keep(name, e)) else {
+                continue;
+            };
+            for category in self.text_categories(keep, reader == Reader::Ocr) {
+                out.insert(read_category(reader, &category), (name.clone(), category));
+            }
+        }
+        out
+    }
+
+    /// The tools that can score `category`, enabled or not. A category read
+    /// out of an image names its reader and the tool behind it
+    /// (`ocr+adult_sites`), or the reader alone for a rule.
     pub fn producers(&self, category: &str, image: bool) -> Vec<String> {
-        self.models
+        let mut out: Vec<String> = self
+            .models
             .iter()
             .filter(|(_, e)| e.spec.is_image() == image && e.spec.categories().contains(category))
             .map(|(name, _)| name.clone())
-            .collect()
+            .collect();
+        if image && let Some((reader, text)) = self.derived(&|_, _| true).remove(category) {
+            let behind = self.producers(&text, false);
+            if behind.is_empty() {
+                out.push(reader);
+            } else {
+                out.extend(behind.into_iter().map(|p| format!("{reader}+{p}")));
+            }
+        }
+        out
     }
 
     /// How the `ready` text models run: each with the second opinion it
@@ -530,7 +735,7 @@ impl Config {
         let text: Vec<(&String, &ModelSpec)> = self
             .models
             .iter()
-            .filter(|(name, e)| !e.spec.is_image() && ready.contains(*name))
+            .filter(|(name, e)| e.spec.is_text_model() && ready.contains(*name))
             .map(|(name, e)| (name, &e.spec))
             .collect();
         let first_pass: BTreeSet<String> = text
@@ -623,11 +828,41 @@ impl Config {
                     }
                 }
             }
+            if let ModelSpec::DomainList {
+                paths,
+                category,
+                allow,
+                ..
+            } = spec
+            {
+                if paths.is_empty() {
+                    bail!("model `{name}`: a domain list needs at least one file in `paths`");
+                }
+                if category.is_empty() {
+                    bail!("model `{name}`: a domain list needs a `category`");
+                }
+                if let Some(bad) = allow.iter().find(|d| !crate::domains::is_domain(d)) {
+                    bail!("model `{name}`: `allow`: `{bad}` is not a domain name");
+                }
+            }
+            if let ModelSpec::ImageOcr {
+                max_side,
+                min_score,
+                ..
+            } = spec
+            {
+                if !(32..=4096).contains(max_side) {
+                    bail!("model `{name}`: `max_side` must be between 32 and 4096");
+                }
+                if !(0.0..=1.0).contains(min_score) {
+                    bail!("model `{name}`: `min_score` must be in [0, 1]");
+                }
+            }
             if let Some(so) = spec.second_opinion() {
                 let first: BTreeSet<String> = self
                     .models
                     .values()
-                    .filter(|e| !e.spec.is_image() && e.spec.second_opinion().is_none())
+                    .filter(|e| e.spec.is_text_model() && e.spec.second_opinion().is_none())
                     .flat_map(|e| e.spec.categories())
                     .collect();
                 if !first.contains(&so.category) {

@@ -3,7 +3,7 @@
 // Case tables are tuples on purpose: one row per case, read at a glance.
 #![allow(clippy::type_complexity)]
 
-use openmod::catalog::Catalog;
+use openmod::catalog::{Catalog, Label};
 use openmod::decision::{Action, Score, evaluate};
 use openmod::workflow::{Threshold, Workflow};
 use std::collections::BTreeMap;
@@ -295,17 +295,53 @@ fn a_text_category_never_outscores_the_overall_verdict() {
 }
 
 #[test]
-fn unknown_categories_fall_back_to_a_generic_reason() {
-    let wf = workflow(&[("custom_logo", Some(0.5), None)]);
-    let summary = evaluate(
-        &wf,
-        &[score("custom_logo", 0.7, "siglip")],
-        &Catalog::builtin(),
+fn a_label_is_the_category_s_own_the_one_it_was_read_from_or_made_from_its_id() {
+    let mut catalog = Catalog::builtin();
+    catalog.set(
+        "link_gambling",
+        Label {
+            text: "Betting link".into(),
+            message: "This content links to a bookmaker.".into(),
+        },
     );
-    let reason = &summary.reject_reason[0];
-    assert_eq!(reason.id, "custom_logo");
-    assert_eq!(reason.text, "Custom logo", "title derived from the id");
-    assert!(!reason.message.is_empty());
+    // (case, category, title, message)
+    let cases: Vec<(&str, &str, &str, &str)> = vec![
+        (
+            "its own",
+            "nudity",
+            "Nudity",
+            "This content contains nudity or sexual content.",
+        ),
+        (
+            "read in the text of an image",
+            "text_link_adult",
+            "Adult site link in the image text",
+            "Text in this image links to an adult website.",
+        ),
+        (
+            "read in a QR code",
+            "qr_pii_phone",
+            "Phone number in a QR code",
+            "A QR code in this image contains a phone number.",
+        ),
+        (
+            "an override carries over to what is read from it",
+            "qr_link_gambling",
+            "Betting link in a QR code",
+            "A QR code in this image links to a bookmaker.",
+        ),
+        (
+            "a custom category",
+            "custom_logo",
+            "Custom logo",
+            "This content was flagged for: custom logo.",
+        ),
+    ];
+    for (case, id, text, message) in cases {
+        let label = catalog.label(id);
+        assert_eq!(label.text, text, "{case}: title");
+        assert_eq!(label.message, message, "{case}: message");
+    }
 }
 
 #[test]

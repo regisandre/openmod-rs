@@ -47,6 +47,9 @@ pub enum Source {
     /// A file openmod derives from an upstream model (see `tools/export_*.py`),
     /// published with openmod's releases.
     Openmod,
+    /// A list its publisher keeps up to date: not pinned, refreshed by the
+    /// server every `lists_refresh_hours`. Its `size` is an estimate.
+    List { url: &'static str },
 }
 
 /// Where the derived files are published. `OPENMOD_MODELS_URL` overrides it,
@@ -55,7 +58,7 @@ pub const DERIVED_URL: &str =
     "https://github.com/regisandre/openmod-rs/releases/download/models-v1";
 
 /// Memory of the server itself with no model loaded, text rules included.
-pub const BASE_RAM_MB: u32 = 8;
+pub const BASE_RAM_MB: u32 = 19;
 
 /// What ONNX Runtime adds once, as soon as one model is loaded.
 pub const RUNTIME_RAM_MB: u32 = 53;
@@ -75,7 +78,13 @@ impl File {
                     std::env::var("OPENMOD_MODELS_URL").unwrap_or_else(|_| DERIVED_URL.to_string());
                 format!("{}/{}", base.trim_end_matches('/'), self.name)
             }
+            Source::List { url } => url.to_string(),
         }
+    }
+
+    /// Whether the file is pinned to a size and a SHA-256.
+    pub fn pinned(&self) -> bool {
+        !matches!(self.source, Source::List { .. })
     }
 }
 
@@ -89,6 +98,33 @@ const fn hf(repo: &'static str, revision: &'static str, path: &'static str) -> S
 
 const SIGLIP: &str = "Xenova/siglip-base-patch16-224";
 const SIGLIP_REV: &str = "4649052661e53c7000355844105f8a1792088239";
+
+const PPOCR_DET: &str = "PaddlePaddle/PP-OCRv5_mobile_det_onnx";
+const PPOCR_DET_REV: &str = "e6f4fa85f00e168c862bc462aebca69eef9b3d3d";
+const PPOCR_REC: &str = "PaddlePaddle/latin_PP-OCRv5_mobile_rec_onnx";
+const PPOCR_REC_REV: &str = "89d3a50e2c27e2e7cceeab0e944c25c807d5db4f";
+
+/// A list of HaGeZi's DNS blocklists, in its domain-per-line edition: a
+/// listed domain covers its subdomains.
+const fn hagezi(name: &'static str, url: &'static str, size: u64) -> File {
+    File {
+        name,
+        source: Source::List { url },
+        sha256: "",
+        size,
+    }
+}
+
+/// Every domain list reads it, so that a listed public suffix never covers
+/// the sites registered under it.
+const PUBLIC_SUFFIXES: File = File {
+    name: "public_suffix_list.dat",
+    source: Source::List {
+        url: "https://publicsuffix.org/list/public_suffix_list.dat",
+    },
+    sha256: "",
+    size: 340_000,
+};
 
 pub const TOOLS: &[Tool] = &[
     Tool {
@@ -203,7 +239,100 @@ pub const TOOLS: &[Tool] = &[
             },
         ],
     },
+    Tool {
+        id: "ocr",
+        name: "PP-OCRv5",
+        kind: Kind::Image,
+        summary: "Reads the text of an image (posters, flyers, screenshots) and checks it like a text: links to adult, gambling or unsafe sites, extremist slogans, phone numbers and more.",
+        ram_mb: OCR_RAM_MB,
+        license: "Apache-2.0",
+        files: &[
+            File {
+                name: "ppocrv5-mobile-det.onnx",
+                source: hf(PPOCR_DET, PPOCR_DET_REV, "inference.onnx"),
+                sha256: "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d",
+                size: 4_826_518,
+            },
+            File {
+                name: "ppocrv5-latin-rec.onnx",
+                source: hf(PPOCR_REC, PPOCR_REC_REV, "inference.onnx"),
+                sha256: "7888113072263cb471b93f66dd5e2ad70548dc526fa1ace760d0d973dd121498",
+                size: 8_042_023,
+            },
+            File {
+                name: "ppocrv5-latin-rec.yml",
+                source: hf(PPOCR_REC, PPOCR_REC_REV, "inference.yml"),
+                sha256: "0bbe984570f597af3638e50bdf2e8276f3ab26a61966096538b3b0d1849f5c84",
+                size: 6_817,
+            },
+        ],
+    },
+    Tool {
+        id: "qr",
+        name: "QR codes",
+        kind: Kind::Image,
+        summary: "Reads the QR codes of an image and checks what they hold like a text: a code to an adult, gambling or unsafe site, a phone number, or any code at all.",
+        ram_mb: QR_RAM_MB,
+        license: "MIT OR Apache-2.0",
+        files: &[],
+    },
+    Tool {
+        id: "adult_sites",
+        name: "Adult sites",
+        kind: Kind::Text,
+        summary: "Links to 90,000 adult sites, in texts, in the text of images and in QR codes. HaGeZi NSFW, refreshed daily.",
+        ram_mb: ADULT_RAM_MB,
+        license: "GPL-3.0 + MPL-2.0",
+        files: &[
+            hagezi(
+                "hagezi-nsfw.txt",
+                "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/nsfw-onlydomains.txt",
+                1_430_000,
+            ),
+            PUBLIC_SUFFIXES,
+        ],
+    },
+    Tool {
+        id: "gambling_sites",
+        name: "Gambling sites",
+        kind: Kind::Text,
+        summary: "Links to 600,000 gambling sites, in texts, in the text of images and in QR codes. HaGeZi Gambling, refreshed daily.",
+        ram_mb: GAMBLING_RAM_MB,
+        license: "GPL-3.0 + MPL-2.0",
+        files: &[
+            hagezi(
+                "hagezi-gambling.txt",
+                "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/gambling-onlydomains.txt",
+                10_400_000,
+            ),
+            PUBLIC_SUFFIXES,
+        ],
+    },
+    Tool {
+        id: "unsafe_sites",
+        name: "Unsafe sites",
+        kind: Kind::Text,
+        summary: "Links to 1.6 million malware, phishing and scam sites, in texts, in the text of images and in QR codes. HaGeZi Threat Intelligence Feeds, refreshed daily.",
+        ram_mb: UNSAFE_RAM_MB,
+        license: "GPL-3.0 + MPL-2.0",
+        files: &[
+            hagezi(
+                "hagezi-tif.txt",
+                "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/tif-onlydomains.txt",
+                27_200_000,
+            ),
+            PUBLIC_SUFFIXES,
+        ],
+    },
 ];
+
+// The readers are measured like the models. A list holds 8 bytes per domain
+// (its hashes), which the measured peak drops match within a few MB.
+const OCR_RAM_MB: u32 = 19;
+const QR_RAM_MB: u32 = 1;
+const ADULT_RAM_MB: u32 = 2;
+const GAMBLING_RAM_MB: u32 = 6;
+const UNSAFE_RAM_MB: u32 = 16;
 
 pub fn find(id: &str) -> Option<&'static Tool> {
     TOOLS.iter().find(|t| t.id == id)
@@ -219,11 +348,16 @@ pub fn file_for(path: &Path) -> Option<&'static File> {
     file(path.file_name()?.to_str()?)
 }
 
-/// A file is present when it exists, with the expected size when openmod
-/// knows the file. Its SHA-256 is checked when it is downloaded.
+/// A file is present when it exists: with the expected size when openmod
+/// pins the file (its SHA-256 is checked when it is downloaded), not empty
+/// when it is a list openmod downloads.
 pub fn present(path: &Path) -> bool {
     match std::fs::metadata(path) {
-        Ok(meta) if meta.is_file() => file_for(path).is_none_or(|f| f.size == meta.len()),
+        Ok(meta) if meta.is_file() => match file_for(path) {
+            Some(f) if f.pinned() => f.size == meta.len(),
+            Some(_) => meta.len() > 0,
+            None => true,
+        },
         _ => false,
     }
 }
@@ -253,10 +387,10 @@ pub fn estimate_mb(config: &Config) -> u32 {
         .filter(|(_, e)| e.enabled)
         .map(|(id, e)| model_ram_mb(id, &e.spec))
         .collect();
-    let runtime = if enabled.is_empty() {
-        0
-    } else {
-        RUNTIME_RAM_MB
-    };
+    let onnx = config
+        .models
+        .values()
+        .any(|e| e.enabled && e.spec.uses_onnx());
+    let runtime = if onnx { RUNTIME_RAM_MB } else { 0 };
     BASE_RAM_MB + runtime + enabled.iter().sum::<u32>()
 }

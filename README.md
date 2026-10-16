@@ -1,6 +1,6 @@
 # openmod
 
-> Status: alpha. Works end to end; image thresholds calibrated on 450 corpus images and 1,911 real party photos and event posters, text thresholds on 486 texts in 7 languages.
+> Status: alpha. Works end to end; image thresholds calibrated on 450 corpus images and 1,911 real party photos and event posters, text thresholds on 486 texts in 7 languages; text in images checked against RapidOCR and on the same 1,911 images.
 > Last checked: 2026-10-16
 
 Self-hosted image and text moderation in one Rust binary. CPU only, no GPU,
@@ -13,15 +13,20 @@ endpoints, and a small admin interface to choose what runs.
   hate symbols, offensive gestures, and any other category you can describe
   in a sentence (zero-shot, no training), with negative prompts for what
   your users post that only looks like it.
+- **What is written on images**: the text of posters and screenshots (OCR)
+  and QR codes, checked like a text: a link to an adult, gambling or
+  phishing site, an extremist slogan, a phone number.
 - **Texts**: unsafe content, violence, sexual content, hate, illegal
   activity, self-harm and more, in many languages (tested in de, en, es, fr,
   it, nl, uk), plus exact rules for emails, phone numbers, IBANs, card
-  numbers, links, "message me on WhatsApp", spam, scams and swear words.
+  numbers, links, "message me on WhatsApp", spam, scams, swear words and
+  extremist slogans, and links to 2.2 million listed adult, gambling,
+  malware, phishing and scam sites.
 - **Explicit answers**: every rejection names its category with a stable
   id, a title, a sentence you can show your users, the score and the
   threshold it crossed.
 - **Pay only for what you load**: turn each tool on or off; a tool that is
-  off uses no memory. From 8 MB (text rules only) to 1.55 GB (everything).
+  off uses no memory. From 19 MB (text rules only) to 1.75 GB (everything).
 
 **Contents**: [Quick start](#quick-start) |
 [Install](#install) |
@@ -218,23 +223,35 @@ loaded and uses no memory.
 | SigLIP | `weapon`, `knife`, `drugs`, `cannabis`, `alcohol`, `smoking`, `underwear`, `swimwear`, `suggestive`, `minor`, `self_harm`, `hate_symbol`, `offensive_gesture`, `violence`, `gore`, and your own | 227 MB | 207 MB | Apache-2.0 |
 | GLiGuard | `text_unsafe` and 13 text categories | 667 MB | 484 MB | Apache-2.0 |
 | Qwen3Guard | a second opinion on risky texts | 550 MB | 529 MB | Apache-2.0 |
-| Text rules | `pii_*`, `link`, `messaging_handoff`, `spam`, `scam`, `profanity` | none | none | built in |
+| PP-OCRv5 | the text of an image, checked like a text: `text_*` | 19 MB | 13 MB | Apache-2.0 |
+| QR codes | what QR codes hold, checked like a text: `qr_*`, and `qr_code` | 1 MB | none | MIT OR Apache-2.0 |
+| Adult sites | `link_adult`: 90,000 domains | 2 MB | 1.4 MB, refreshed daily | GPL-3.0 |
+| Gambling sites | `link_gambling`: 600,000 domains | 6 MB | 10 MB, refreshed daily | GPL-3.0 |
+| Unsafe sites | `link_unsafe`: 1.6 million malware, phishing and scam domains | 16 MB | 27 MB, refreshed daily | GPL-3.0 |
+| Text rules | `pii_*`, `link`, `messaging_handoff`, `spam`, `scam`, `profanity`, `extremism` | none | none | built in |
 
 A tool's memory is how much the peak drops when that tool alone is turned
-off. On top of the tools, the server takes 8 MB, and ONNX Runtime 53 MB
-more as soon as one model is loaded.
+off. On top of the tools, the server takes 19 MB, and ONNX Runtime 53 MB
+more as soon as one model is loaded. The domain lists are
+[HaGeZi's DNS blocklists](https://github.com/hagezi/dns-blocklists) and read
+the [Public Suffix List](https://publicsuffix.org) (MPL-2.0); both are
+downloaded from their publishers, never shipped.
 
-Measured peaks for common choices (peak working set while checking,
-x86-64, `threads_per_model = 2`):
+Measured peaks for common choices (peak working set of `openmod image` or
+`openmod text`, models loaded and one check run, x86-64,
+`threads_per_model = 2`). A profile peaks above the sum of its tools: each
+model's load spike counts in full when no larger one hides it.
 
-| Profile | Tools on | Memory | Model files |
+| Profile | Tools on | Memory | Files |
 |---|---|---|---|
-| Everything (default) | all five | 1.55 GB | 1.26 GB |
-| Without Qwen3Guard | images and GLiGuard | 1.0 GB | 727 MB |
-| Images only | Marqo, Owen, SigLIP | 333 MB | 243 MB |
-| Nudity only | Marqo, Owen | 106 MB | 36 MB |
-| Texts only | GLiGuard, Qwen3Guard | 1.34 GB | 1.01 GB |
-| Text rules only | none | 8 MB | none |
+| Everything (default) | all | 1.74 GB | 1.32 GB |
+| Without Qwen3Guard | images, OCR, QR, lists, GLiGuard | 1.19 GB | 779 MB |
+| Images only | Marqo, Owen, SigLIP, OCR, QR, lists | 528 MB | 295 MB |
+| Images without OCR | Marqo, Owen, SigLIP, QR, lists | 507 MB | 282 MB |
+| Nudity only | Marqo, Owen | 111 MB | 36 MB |
+| Texts only | GLiGuard, Qwen3Guard, lists | 1.34 GB | 1.05 GB |
+| Text rules and lists | lists | 45 MB | 39 MB |
+| Text rules only | none | 11 MB | none |
 
 Turn a tool off in the admin interface, or in `openmod.toml`:
 
@@ -253,6 +270,8 @@ What happens then:
   (`503 workflow_unavailable`) instead of accepting everything.
 - With GLiGuard off and Qwen3Guard on, Qwen3Guard checks every text instead
   of giving a second opinion.
+- The OCR and the QR reader run only for a workflow that names one of their
+  categories (`text_*`, `qr_*`): a nudity-only workflow never pays for them.
 - The text rules are always on. Images only? Turn off GLiGuard and
   Qwen3Guard: 333 MB, and texts still get the rules.
 
@@ -376,21 +395,106 @@ A request that names no workflow uses `default`, which cannot be deleted.
 `openmod validate` refuses a workflow that names a category no model
 produces, so a typo never silently disables a rule.
 
-**Image categories**: `nudity`, `underwear`, `swimwear`, `suggestive`,
-`minor`, `gore`, `violence`, `self_harm`, `weapon` (firearms), `knife`,
-`drugs` (hard drugs), `cannabis`, `alcohol`, `smoking`, `hate_symbol`,
-`offensive_gesture`, plus your own.
+**Image categories**:
+- from the models: `nudity`, `underwear`, `swimwear`, `suggestive`,
+  `minor`, `gore`, `violence`, `self_harm`, `weapon` (firearms), `knife`,
+  `drugs` (hard drugs), `cannabis`, `alcohol`, `smoking`, `hate_symbol`,
+  `offensive_gesture`, plus your own;
+- read out of the image (scores are 0 or 1 for rules and lists): every text
+  category with a `text_` prefix for its text (`text_extremism`,
+  `text_link_adult`, `text_pii_phone`; `text_unsafe` keeps its name), every
+  rule and list category with a `qr_` prefix for its QR codes
+  (`qr_link_gambling`, `qr_pii_iban`), and `qr_code` for any code at all.
 
 **Text categories**:
 - from the models: `text_unsafe`, `violence`, `sexual`, `hate`, `illegal`,
   `self_harm`, `unethical`, `pii`, `privacy`, `child_safety`, `political`,
   `misinformation`, `copyright`, `regulated_advice`, `jailbreak`;
 - from the rules (scores are 0 or 1): `pii_email`, `pii_phone`, `pii_iban`,
-  `pii_card`, `link`, `messaging_handoff`, `spam`, `scam`, `profanity`.
+  `pii_card`, `link`, `messaging_handoff`, `spam`, `scam`, `profanity`,
+  `extremism`;
+- from the domain lists (0 or 1): `link_adult`, `link_gambling`,
+  `link_unsafe`, plus the category of any list you add.
 
 `text_unsafe` is the overall verdict of the text models. The other model
 categories are capped at it: they name the reason, but never flag a text
 the models judge safe on their own.
+
+### Text and QR codes in images
+
+A workflow that names a `text_*` category runs the OCR, one that names a
+`qr_*` category the QR reader:
+
+```toml
+[workflows.posters.image]
+nudity = { reject = 0.8, review = 0.5 }
+text_extremism = { reject = 1.0 }
+text_link_adult = { reject = 1.0 }
+text_link_gambling = { review = 1.0 }
+qr_link_unsafe = { reject = 1.0 }
+qr_code = { review = 1.0 }
+```
+
+- The text of an image goes through everything a text goes through: the
+  rules, the domain lists, and the text models when the workflow names one
+  of their categories (`text_hate`). A QR code goes through the rules and
+  the lists only.
+- A reason read out of an image says so: "Text in this image links to an
+  adult website.", "A QR code in this image links to a gambling website."
+
+### Domain lists
+
+A link to a listed site scores the list's category: `link_adult` in a text,
+`text_link_adult` printed on an image, `qr_link_adult` behind a QR code.
+
+- **What is a link**: a URL, `www.` and bare domains of any TLD, an
+  obfuscated dot (`casino[.]com`). The domain of an email address is not a
+  link.
+- **Subdomains**: a listed domain covers its subdomains, except where they
+  belong to someone else. A listed public suffix (`tochigi.jp`, a dynamic
+  DNS provider) matches only itself, and so does a listed domain with
+  three or more listed subdomains besides `www` and `m`: it hosts other
+  people's sites (a blog platform), and only the listed ones match.
+- **Allow**: a list is wrong now and then. The domains named in `allow`
+  are never flagged by that list, nor are their subdomains:
+
+```toml
+[models.gambling_sites]
+kind = "domain_list"
+paths = ["lists/hagezi-gambling.txt"]
+public_suffixes = "lists/public_suffix_list.dat"
+category = "link_gambling"
+allow = ["casinodeparis.fr"]   # a concert hall, not a casino
+```
+
+- **Which lists**: HaGeZi's NSFW, Gambling and Threat Intelligence Feeds.
+  On the 2,820 domains that the venues, promoters and artists of the real
+  content below link to, they flag one, a concert hall named after a
+  casino.
+  The Block List Project lists, used before, flagged eight, among them a
+  dance music community and a hardcore festival as adult sites, and their
+  phishing and malware lists caught 1 of 269 fresh OpenPhish hosts and 26
+  of 579 URLhaus hosts, against 19 and 308 for the Threat Intelligence
+  Feeds.
+- **Refresh**: `openmod fetch` and the admin interface download the lists;
+  the server asks for each one again every `lists_refresh_hours` (24), with
+  `If-Modified-Since` for publishers that honour it, and reloads the lists
+  that changed. A list that comes
+  back empty is refused: the copy in place stays.
+- **Your own list**: one domain per line, as a bare domain, a hosts-file
+  line or an adblock rule. Its category is yours to name:
+
+```toml
+[models.banned_sites]
+kind = "domain_list"
+paths = ["lists/banned.txt"]
+public_suffixes = "lists/public_suffix_list.dat"
+category = "link_banned"
+```
+
+  Then use `link_banned`, `text_link_banned` or `qr_link_banned` in a
+  workflow. A file openmod does not know is read as it is, never
+  downloaded.
 
 ### Adding an image category
 
@@ -460,6 +564,7 @@ threads_per_model = 2             # CPU threads per ONNX model
 # api_keys_file = "/etc/openmod/keys"   # one key per line
 allow_unauthenticated = false     # loopback only
 state_file = "openmod-state.toml" # admin token and API key digests
+lists_refresh_hours = 24          # domain lists asked for again; 0 never
 
 [admin]
 enabled = true
@@ -467,6 +572,7 @@ bind = "127.0.0.1:8089"
 
 [models.<name>]         # one block per tool, see openmod.toml
 kind = "image_classifier" | "image_zero_shot" | "text_classifier" | "text_guard"
+     | "image_ocr" | "qr_reader" | "domain_list"
 enabled = true
 
 [workflows.<name>.image]
@@ -496,7 +602,7 @@ The models, workflows and labels reload from the admin interface. The
 | Command | What it does |
 |---|---|
 | `openmod serve` | the API and the admin interface; writes a default configuration first if there is none |
-| `openmod fetch [--all]` | downloads the model files of the enabled tools (`--all`: every configured tool) |
+| `openmod fetch [--all]` | downloads the model files and domain lists of the enabled tools (`--all`: every configured tool) |
 | `openmod admin-token` | prints a new admin token; the old one and its sessions stop working |
 | `openmod key add <name>` | creates an API key and prints it once; a running server accepts it at its next request |
 | `openmod key list` | lists the keys: id, first characters, creation date, name |
@@ -517,7 +623,10 @@ Every command takes `-c <file>` (or `OPENMOD_CONFIG`).
 | [SigLIP base](https://huggingface.co/google/siglip-base-patch16-224), int8 | 94 MB (+111 MB at startup) | Apache-2.0 | any category described by prompts |
 | [GLiGuard](https://huggingface.co/fastino/GLiNER2-Guardrails-PII-Multi) (GLiNER2, mDeBERTa-v3) | 467 MB | Apache-2.0 | `text_unsafe` and 13 text categories |
 | [Qwen3Guard-Gen-0.6B](https://huggingface.co/Qwen/Qwen3Guard-Gen-0.6B), 4-bit | 517 MB | Apache-2.0 | a second opinion on risky texts |
-| Built-in rules | none | Apache-2.0 | PII, links, spam, scams, profanity |
+| [PP-OCRv5 mobile det](https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_det_onnx) and [latin rec](https://huggingface.co/PaddlePaddle/latin_PP-OCRv5_mobile_rec_onnx) | 13 MB | Apache-2.0 | the text of an image |
+| [rqrr](https://github.com/WanzenBug/rqrr), a port of quirc | none | MIT OR Apache-2.0, ISC | QR codes |
+| [HaGeZi's DNS blocklists](https://github.com/hagezi/dns-blocklists): NSFW, Gambling, Threat Intelligence Feeds | 39 MB | GPL-3.0 | links to listed sites |
+| Built-in rules | none | Apache-2.0 | PII, links, spam, scams, profanity, extremism |
 
 - Every model runs on [ONNX Runtime](https://onnxruntime.ai) through
   [`ort`](https://ort.pyke.io), linked statically into the binary.
@@ -532,16 +641,33 @@ Every command takes `-c <file>` (or `OPENMOD_CONFIG`).
   pull its score down. The prompts are encoded once at startup, then the
   text half of SigLIP is freed, so an image costs one vision pass.
 
+**Text and QR codes in images.**
+- The OCR runs PaddleOCR's own pipeline on two ONNX models: the detector
+  sees the image at most 960 pixels on its longer side; its probability map
+  is cut at 0.3, each region becomes the smallest rectangle around it, kept
+  when the map averages 0.6 inside and grown like DB's unclip; each box is
+  cut out of the full-size image, straightened, read at 48 pixels high and
+  decoded greedily (CTC). Lines read with less than 0.5 confidence are
+  dropped, and words boxed apart on one line are joined back.
+- The QR reader searches a grey copy of the image at most 2048 pixels on
+  its longer side, then its negative for codes printed light on dark.
+- What they read becomes a text (at most `max_text_chars`) and is checked as
+  described below, its categories renamed with `text_` or `qr_`.
+
 **Texts, in order.**
 1. **Rules** read the raw text: emails, phones, IBANs (checksum), card
    numbers (Luhn), links, messaging handoffs, spam patterns, and scams (a
-   link asking to verify a card or an account, or "payment first").
+   link asking to verify a card or an account, or "payment first"). The
+   links found are looked up in the domain lists the workflow needs, each
+   domain as a 64-bit hash, so a million domains take 8 MB.
 2. **Deobfuscation**: the models read the text with obfuscation undone:
    Unicode compatibility folding (fancy and fullwidth letters), invisible
    characters removed, letter floods squeezed, `t u e r` joined, leetspeak
    (`dr0p`, `b!tch`, `a$$hole`) turned back into letters.
-3. **Profanity rule**: swear words in the seven languages, on the
-   deobfuscated text.
+3. **Profanity and extremism rules**: swear words, and the slogans, codes
+   and names of extremist movements and terrorist organisations, in the
+   seven languages, on the deobfuscated text. Codes that also mean
+   something ordinary (`88`, `1488`, `ISIS`) are left out.
 4. **GLiGuard** classifies every text: safe or unsafe, plus 13 harm
    categories. It reads the label names, so labels can be edited without
    retraining.
@@ -602,7 +728,7 @@ as an upper bound. "Caught" counts a review or a reject.
 | suggestive | 15 | 60% |
 | gore and blood | 12 | 58% |
 | artistic nudity (paintings, statues) | 20 | 35% |
-| text in images | 12 | 0% (no OCR yet) |
+| text in images (10 to flag, 2 controls) | 12 | 100%, controls pass |
 | **safe**: events, crowds, stages | 80 | 0 flagged |
 | **safe**: landscapes, portraits, products | 30 | 0 flagged |
 
@@ -611,12 +737,16 @@ refused:
 
 | Images | `default` rejected / sent to review | `strict` rejected / sent to review |
 |---|---|---|
-| 985 used for tuning | 0.3% / 2.2% | 1.5% / 5.8% |
-| 926 held out | 0.4% / 3.3% | 2.1% / 4.2% |
+| 985 used for tuning | 0.3% / 2.2% | 1.5% / 8.6% |
+| 926 held out | 0.4% / 3.3% | 2.2% / 8.4% |
 
 Before the 0.2.0 prompts and the nudity mean, `strict` rejected 5.6% of the
 same 985 images and sent 16% to review: shirtless dancers read as nudity,
-raised arms as fights, hoods as the Ku Klux Klan.
+raised arms as fights, hoods as the Ku Klux Klan. Since 0.3.0 it also reads
+what is written on them, and sends more to review: the phone numbers and
+emails printed on posters, and the DJ names the text models find risky.
+None of the 1,911 links to a listed site or carries an extremist slogan, so
+the `default` rates did not move.
 
 **Texts**, own corpus, every text tool on:
 
@@ -659,9 +789,33 @@ with `default`, against 78% with `strict`.
 
 | Check | 2 threads per model | 8 threads per model, median (p95) |
 |---|---|---|
-| an image, every image tool | about 290 ms | 184 ms (237 ms) |
+| an image, the image models (Marqo, Owen, SigLIP) | about 290 ms | 184 ms (237 ms) |
+| a real poster or party photo, every image tool, OCR and QR included | 830 ms median, 1.2 s p90 | |
 | a text, GLiGuard alone | about 110 ms | |
 | a text, own corpus, both text tools | about 0.6 s when Qwen3Guard is consulted | 156 ms (716 ms) |
+
+**Throughput** of one server on the same laptop (Intel i7-10875H, 8 cores,
+16 threads), clients keeping its queue full, real posters and party photos
+for the images, the own corpus for the texts:
+
+| Checks | `max_concurrent`, threads per model | Per second | CPU used | CPU per check | Memory under load |
+|---|---|---|---|---|---|
+| images, every image tool | 1, 2 | 1.2 | 1.6 cores | 1.3 s | 0.9 GB |
+| images, every image tool | 4, 1 | 2.3 | 3.1 cores | 1.35 s | 1.0 GB |
+| images, every image tool | 8, 2 | 3.0 | 7.0 cores | 2.3 s | 1.2 GB |
+| images, image models only | 1, 2 | 2.6 | 1.6 cores | 0.6 s | 0.5 GB |
+| texts, GLiGuard | 2, 2 | 5.5 | 1.9 cores | 0.34 s | 1.0 GB |
+| texts, GLiGuard and Qwen3Guard | 2, 2 | 2.1 | 2.7 cores | 1.3 s | 1.6 GB |
+| texts, rules and lists | 16, 1 | 12,400 | 4.7 cores | 0.4 ms | 0.5 GB |
+
+Each model runs one check at a time, so a server tops out at about three
+images a second with the OCR on, whatever `max_concurrent` says, and more
+threads only spend more CPU per check. Past that, run more servers behind a
+load balancer, each with its own models in memory. Qwen3Guard only runs on
+texts GLiGuard finds risky, three in five in the own corpus: on everyday
+content it costs much less. A server under load holds more than the peaks
+of [Choose what to load](#choose-what-to-load): the images being decoded,
+the ones waiting their turn, and the buffers ONNX Runtime keeps for them.
 
 ## Calibration
 
@@ -721,14 +875,27 @@ python tools/category_rates.py scores.jsonl        # texts: hit rates per catego
 - **Model files** are downloaded over HTTPS from pinned revisions, kept
   only when their size and SHA-256 match, and written to a temporary file
   first, so a failed download never replaces a model.
+- **Domain lists** change every day, so they are not pinned: they come over
+  HTTPS from their publishers, capped at 256 MB, refused when they hold no
+  entry, and swapped in whole. A bad list can only flag or miss links; it
+  never runs code.
+- **Text and QR codes in images**: the OCR reads at most 200 lines of an
+  image scaled to 960 pixels, the QR reader at most 8 codes. The QR decoder
+  can panic on a malformed image; the panic is caught and the image holds
+  no code.
 
 Found a vulnerability? Please report it privately through GitHub's
 "Report a vulnerability" on the Security tab rather than in an issue.
 
 ## Limitations
 
-- Text inside images (posters, screenshots) is not read: there is no OCR
-  yet.
+- The OCR reads Latin scripts, so not Ukrainian: point `recognizer` and
+  `dictionary` at PaddleOCR's `cyrillic_PP-OCRv5_mobile_rec_onnx` to read
+  Cyrillic instead. Small, blurred or heavily stylised lettering is missed.
+- A domain list knows only the sites it lists: a link to a new site passes.
+  It also lists sites by mistake now and then: `allow` the ones you meet.
+  The extremism rule is a word list too: it catches slogans and names, not
+  opinions, and flags a lecture or a news headline that names a group.
 - Minors are detected zero-shot, from the whole picture: about half of the
   everyday photos of children, rarely a young-looking adult. There is no
   face or age model. Do not rely on openmod for child-safety obligations.

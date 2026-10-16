@@ -175,6 +175,35 @@ const BUILTIN: &[(&str, &str, &str)] = &[
     ("spam", "Spam", "This content looks like spam."),
     ("profanity", "Profanity", "This content contains profanity."),
     ("scam", "Scam", "This content looks like a scam."),
+    (
+        "extremism",
+        "Extremism",
+        "This content refers to an extremist movement, group or slogan.",
+    ),
+    (
+        "link_adult",
+        "Adult site link",
+        "This content links to an adult website.",
+    ),
+    (
+        "link_gambling",
+        "Gambling site link",
+        "This content links to a gambling website.",
+    ),
+    (
+        "link_unsafe",
+        "Unsafe site link",
+        "This content links to a website known for phishing, scams or malware.",
+    ),
+    // read out of images
+    ("qr_code", "QR code", "This image contains a QR code."),
+];
+
+/// How a category read out of an image is named: its prefix, what its title
+/// adds, and what its message is about.
+const READ: &[(&str, &str, &str)] = &[
+    ("qr_", "in a QR code", "A QR code in this image"),
+    ("text_", "in the image text", "Text in this image"),
 ];
 
 impl Catalog {
@@ -199,10 +228,14 @@ impl Catalog {
         self.labels.insert(id.to_string(), label);
     }
 
-    /// The label of `id`, or one derived from the id for custom categories.
+    /// The label of `id`: its own, the one of the text category it was read
+    /// from (`text_link_adult` from `link_adult`), or one made from the id.
     pub fn label(&self, id: &str) -> Label {
         if let Some(l) = self.labels.get(id) {
             return l.clone();
+        }
+        if let Some(l) = self.read_label(id) {
+            return l;
         }
         let words = id.replace(['_', '-'], " ");
         let mut chars = words.chars();
@@ -214,5 +247,19 @@ impl Catalog {
             message: format!("This content was flagged for: {}.", words),
             text,
         }
+    }
+
+    fn read_label(&self, id: &str) -> Option<Label> {
+        READ.iter().find_map(|(prefix, in_where, subject)| {
+            let base = self.labels.get(id.strip_prefix(prefix)?)?;
+            let rest = base
+                .message
+                .strip_prefix("This content ")
+                .or_else(|| base.message.strip_prefix("This text "))?;
+            Some(Label {
+                text: format!("{} {in_where}", base.text),
+                message: format!("{subject} {rest}"),
+            })
+        })
     }
 }

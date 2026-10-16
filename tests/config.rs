@@ -74,6 +74,23 @@ logit_bias = -12.9
 violence = { shift = 5.9, prompts = ["people fighting"], negative = ["people dancing"] }
 "#;
 
+const READERS: &str = r#"
+[models.adult_sites]
+kind = "domain_list"
+paths = ["lists/porn.txt"]
+public_suffixes = "lists/psl.dat"
+category = "link_adult"
+
+[models.qr]
+kind = "qr_reader"
+
+[models.ocr]
+kind = "image_ocr"
+detector = "d.onnx"
+recognizer = "r.onnx"
+dictionary = "r.yml"
+"#;
+
 const TEXT_MODELS: &str = r#"
 [models.gliguard]
 kind = "text_classifier"
@@ -101,6 +118,16 @@ fn parse(text: &str) -> Result<Config, String> {
 #[test]
 fn config_validation_refuses_what_would_silently_disable_a_rule() {
     let no_prompt = ZERO_SHOT_NEGATIVES.replace("[\"people fighting\"]", "[]");
+    let readers_and_text = format!("{READERS}\n{TEXT_MODELS}");
+    let list_without_file = READERS.replace("paths = [\"lists/porn.txt\"]", "paths = []");
+    let allowed_url = READERS.replace(
+        "category = \"link_adult\"",
+        "category = \"link_adult\"\nallow = [\"https://night.events/\"]",
+    );
+    let tiny_ocr = READERS.replace(
+        "dictionary = \"r.yml\"",
+        "dictionary = \"r.yml\"\nmax_side = 10",
+    );
     // (case, models, workflows, expected error fragment or None when valid)
     let cases: Vec<(&str, &str, &str, Option<&str>)> = vec![
         (
@@ -205,6 +232,54 @@ fn config_validation_refuses_what_would_silently_disable_a_rule() {
             "[workflows.default.image]\nviolence = { reject = 0.8 }",
             Some("negative"),
         ),
+        (
+            "text and QR codes read out of images",
+            READERS,
+            "[workflows.default.image]\ntext_link_adult = { reject = 1.0 }\nqr_link_adult = { reject = 1.0 }\ntext_extremism = { reject = 1.0 }\nqr_code = { review = 1.0 }\n[workflows.default.text]\nlink_adult = { reject = 1.0 }",
+            None,
+        ),
+        (
+            "a domain list scores texts, not images",
+            READERS,
+            "[workflows.default.image]\nlink_adult = { reject = 1.0 }",
+            Some("`link_adult`"),
+        ),
+        (
+            "no OCR, no text read out of images",
+            MODELS,
+            "[workflows.default.image]\ntext_link = { reject = 1.0 }",
+            Some("`text_link`"),
+        ),
+        (
+            "the text of an image goes through the text models",
+            &readers_and_text,
+            "[workflows.default.image]\ntext_unsafe = { reject = 0.8 }",
+            None,
+        ),
+        (
+            "a QR code does not",
+            &readers_and_text,
+            "[workflows.default.image]\nqr_text_unsafe = { reject = 0.8 }",
+            Some("`qr_text_unsafe`"),
+        ),
+        (
+            "a domain list without a file",
+            &list_without_file,
+            "[workflows.default.text]\nlink_adult = { reject = 1.0 }",
+            Some("`paths`"),
+        ),
+        (
+            "a domain list allowing a URL instead of a domain",
+            &allowed_url,
+            "[workflows.default.text]\nlink_adult = { reject = 1.0 }",
+            Some("`allow`: `https://night.events/` is not a domain name"),
+        ),
+        (
+            "an OCR detector shown a thumbnail",
+            &tiny_ocr,
+            "[workflows.default.image]\ntext_link = { reject = 1.0 }",
+            Some("`max_side`"),
+        ),
     ];
     for (case, models, workflows, expected) in cases {
         let result = parse(&format!("{models}\n{workflows}"));
@@ -215,6 +290,85 @@ fn config_validation_refuses_what_would_silently_disable_a_rule() {
                 assert!(err.contains(fragment), "{case}: {err}");
             }
         }
+    }
+}
+
+#[test]
+fn a_category_read_out_of_an_image_needs_its_reader_and_the_tool_behind_it() {
+    let config = parse(&format!(
+        "{READERS}
+{TEXT_MODELS}"
+    ))
+    .unwrap();
+    // (case, category, for images, tools that score it)
+    let cases: Vec<(&str, &str, bool, Vec<&str>)> = vec![
+        (
+            "a domain list read in the text of an image",
+            "text_link_adult",
+            true,
+            vec!["ocr+adult_sites"],
+        ),
+        (
+            "the same list read in a QR code",
+            "qr_link_adult",
+            true,
+            vec!["qr+adult_sites"],
+        ),
+        ("a rule read in a QR code", "qr_link", true, vec!["qr"]),
+        (
+            "the text models read in the text of an image",
+            "text_unsafe",
+            true,
+            vec!["ocr+gliguard", "ocr+qwen"],
+        ),
+        ("any QR code at all", "qr_code", true, vec!["qr"]),
+        (
+            "the list itself, for texts",
+            "link_adult",
+            false,
+            vec!["adult_sites"],
+        ),
+    ];
+    for (case, category, image, expected) in cases {
+        assert_eq!(config.producers(category, image), expected, "{case}");
+    }
+    let off = parse(&format!(
+        "{}\n{TEXT_MODELS}",
+        READERS.replace(
+            "category = \"link_adult\"",
+            "category = \"link_adult\"\nenabled = false"
+        )
+    ))
+    .unwrap();
+    // (case, category, for images, known, available)
+    let cases: Vec<(&str, &str, bool, bool, bool)> = vec![
+        (
+            "a disabled list, read in images",
+            "text_link_adult",
+            true,
+            true,
+            false,
+        ),
+        (
+            "a disabled list, for texts",
+            "link_adult",
+            false,
+            true,
+            false,
+        ),
+        ("the rules still read images", "text_link", true, true, true),
+    ];
+    for (case, category, image, known, available) in cases {
+        assert_eq!(
+            off.known_categories(image).contains(category),
+            known,
+            "{case}: known"
+        );
+        assert_eq!(
+            off.available_categories(image).contains(category),
+            available,
+            "{case}: available"
+        );
     }
 }
 

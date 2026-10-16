@@ -24,4 +24,19 @@ their own licenses:
   ONNX with the embedding table quantized to 4 bits by tools/export_gliguard.py,
   and published with openmod's `models-v1` release.
 
+- PaddlePaddle/PP-OCRv5_mobile_det_onnx and
+  PaddlePaddle/latin_PP-OCRv5_mobile_rec_onnx
+  Apache-2.0 - https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_det_onnx
+  and https://huggingface.co/PaddlePaddle/latin_PP-OCRv5_mobile_rec_onnx
+
+The domain lists openmod downloads are not part of this repository either:
+
+- HaGeZi's DNS blocklists (NSFW, Gambling, Threat Intelligence Feeds)
+  GPL-3.0 - https://github.com/hagezi/dns-blocklists
+- The Public Suffix List
+  MPL-2.0 - https://publicsuffix.org
+
 ONNX Runtime is linked statically: MIT - https://github.com/microsoft/onnxruntime
+
+QR codes are decoded by rqrr, a port of quirc: MIT OR Apache-2.0, and ISC
+for quirc - https://github.com/WanzenBug/rqrr

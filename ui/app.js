@@ -238,10 +238,7 @@ async function setTool(id, enabled) {
 }
 
 function lostRules(tool) {
-  return S.unchecked
-    .map((u) => u.split("."))
-    .filter(([, kind, cat]) => kind === tool.kind && tool.categories.includes(cat))
-    .map(([wf, , cat]) => `${wf} (${cat})`);
+  return tool.needed_by.map((u) => u.split(".")).map(([wf, , cat]) => `${wf} (${cat})`);
 }
 
 function toolRow(tool) {
@@ -302,7 +299,7 @@ function rulesRow() {
       "div.body",
       null,
       h("div.title", null, h("h3", null, "Text rules")),
-      h("p.summary", null, "Emails, phone numbers, IBANs, card numbers, links, messaging handoffs, spam, scams and swear words. Exact matches, in microseconds."),
+      h("p.summary", null, "Emails, phone numbers, IBANs, card numbers, links, messaging handoffs, spam, scams, swear words and extremist slogans. Exact matches, in microseconds."),
     ),
     h("div.side", null, h("span.muted.small", null, "no memory"), h("span.status.ready", null, "Always on")),
   );
@@ -926,7 +923,7 @@ function setupModels() {
     body = h(
       "div.stack",
       null,
-      h("p", null, `${missing.map((t) => t.name).join(", ")}: ${size(total)} to download, checked against pinned SHA-256 digests.`),
+      h("p", null, `${missing.map((t) => t.name).join(", ")}: ${size(total)} to download. Models are checked against pinned SHA-256 digests; domain lists come from their publishers and are refreshed every day.`),
       h("div", null, h("button.primary", { onclick: () => download() }, `Download ${size(total)}`)),
     );
   } else body = h("p", null, "Every model file is here.");

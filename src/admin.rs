@@ -320,6 +320,23 @@ fn tool_json(engine: &Engine, id: &str, builtin: Option<&Tool>) -> Value {
         None => builtin.map(|t| t.ram_mb).unwrap_or(0),
     };
     let role = engine.second_opinion_of(id).map(|_| "second_opinion");
+    // The unchecked rules this tool would let run again.
+    let needed_by: Vec<String> = engine
+        .unchecked_rules()
+        .into_iter()
+        .filter(|rule| {
+            let mut parts = rule.splitn(3, '.');
+            let (_, kind, category) = (parts.next(), parts.next(), parts.next());
+            let (Some(kind), Some(category)) = (kind, category) else {
+                return false;
+            };
+            engine
+                .config
+                .producers(category, kind == "image")
+                .iter()
+                .any(|p| p.split('+').any(|tool| tool == id))
+        })
+        .collect();
     json!({
         "id": id,
         "name": builtin.map(|t| t.name).unwrap_or(id),
@@ -336,6 +353,7 @@ fn tool_json(engine: &Engine, id: &str, builtin: Option<&Tool>) -> Value {
         "downloadable": downloadable,
         "categories": categories,
         "role": role,
+        "needed_by": needed_by,
     })
 }
 
@@ -628,9 +646,7 @@ fn update(app: &Shared, i: usize, f: impl FnOnce(&mut Progress)) {
 fn run_downloads(app: Shared, list: Vec<Needed>) {
     for (i, n) in list.iter().enumerate() {
         update(&app, i, |p| p.state = "downloading");
-        let result = download::fetch(&n.url, &n.dest, &n.sha256, n.size, |done| {
-            update(&app, i, |p| p.done = done)
-        });
+        let result = n.get(|done| update(&app, i, |p| p.done = done.min(p.size)));
         update(&app, i, |p| match result {
             Ok(()) => {
                 p.state = "done";

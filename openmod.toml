@@ -15,6 +15,8 @@ threads_per_model = 2
 allow_unauthenticated = false
 # The admin token and the API keys of the admin interface, as digests only.
 state_file = "openmod-state.toml"
+# How often the domain lists are downloaded again, if they changed; 0 never.
+lists_refresh_hours = 24
 
 # The admin web interface, on its own port. Keep it on loopback and reach it
 # through an SSH tunnel or an HTTPS reverse proxy.
@@ -218,6 +220,50 @@ path = "models/qwen3guard-q4.onnx"
 tokenizer = "models/qwen3guard-tokenizer.json"
 second_opinion = { category = "text_unsafe", low = 0.2, high = 1.0 }
 
+# PP-OCRv5 mobile (Apache-2.0): reads the text of an image. That text goes
+# through everything a text goes through, and each category comes back with
+# a `text_` prefix: `text_link_adult`, `text_extremism`, `text_pii_phone`
+# (`text_unsafe` keeps its name). About 0.2 s per photo, 0.5 s per poster.
+[models.ocr]
+kind = "image_ocr"
+detector = "models/ppocrv5-mobile-det.onnx"
+recognizer = "models/ppocrv5-latin-rec.onnx"
+dictionary = "models/ppocrv5-latin-rec.yml"
+max_side = 960
+min_score = 0.5
+
+# Reads the QR codes of an image. What they hold goes through the text rules
+# and the domain lists, and comes back with a `qr_` prefix
+# (`qr_link_gambling`); `qr_code` scores any code at all.
+[models.qr]
+kind = "qr_reader"
+
+# HaGeZi's DNS blocklists (GPL-3.0), downloaded with the models and
+# refreshed every `lists_refresh_hours`. A link to a listed site scores the
+# list's category, in texts and in what the readers above find in images.
+# The Public Suffix List (MPL-2.0) keeps a listed public suffix, such as a
+# dynamic DNS provider, from covering the sites of its users. `allow` names
+# domains a list is wrong about: they and their subdomains are never flagged.
+[models.adult_sites]
+kind = "domain_list"
+paths = ["lists/hagezi-nsfw.txt"]
+public_suffixes = "lists/public_suffix_list.dat"
+category = "link_adult"
+
+[models.gambling_sites]
+kind = "domain_list"
+paths = ["lists/hagezi-gambling.txt"]
+public_suffixes = "lists/public_suffix_list.dat"
+category = "link_gambling"
+allow = []
+
+# Malware, phishing and scam sites: HaGeZi's Threat Intelligence Feeds.
+[models.unsafe_sites]
+kind = "domain_list"
+paths = ["lists/hagezi-tif.txt"]
+public_suffixes = "lists/public_suffix_list.dat"
+category = "link_unsafe"
+
 # How the scores several models give one category combine: "max" (the
 # default) lets any model flag on its own, "mean" makes them agree. Nudity
 # takes the mean of Marqo and Owen: on real party photos, each one alone
@@ -236,6 +282,14 @@ hate_symbol = { reject = 0.8, review = 0.5 }
 self_harm = { reject = 0.8, review = 0.5 }
 drugs = { review = 0.5 }
 minor = { review = 0.5 }
+# What the text of an image and its QR codes say. Rule and list hits score 1.
+text_extremism = { reject = 1.0 }
+text_link_adult = { reject = 1.0 }
+text_link_unsafe = { reject = 1.0 }
+text_link_gambling = { review = 1.0 }
+qr_link_adult = { reject = 1.0 }
+qr_link_unsafe = { reject = 1.0 }
+qr_link_gambling = { review = 1.0 }
 
 [workflows.default.text]
 # `text_unsafe` is the overall verdict; a category never scores above it, so
@@ -254,6 +308,10 @@ pii_card = { reject = 1.0 }
 messaging_handoff = { review = 1.0 }
 spam = { review = 1.0 }
 scam = { review = 1.0 }
+extremism = { review = 1.0 }
+link_adult = { review = 1.0 }
+link_gambling = { review = 1.0 }
+link_unsafe = { reject = 1.0 }
 
 # A nudity-only workflow, e.g. for profile pictures.
 [workflows.nudity_only.image]
@@ -277,6 +335,31 @@ smoking = { review = 0.5 }
 hate_symbol = { reject = 0.6, review = 0.4 }
 offensive_gesture = { review = 0.5 }
 minor = { review = 0.4 }
+# What is written on the image goes through the text models too, and only
+# ever to review: the OCR reads a poster out of context, where a DJ name
+# or a party title can read like a threat.
+text_unsafe = { review = 0.6 }
+text_violence = { review = 0.6 }
+text_sexual = { review = 0.6 }
+text_hate = { review = 0.6 }
+text_illegal = { review = 0.6 }
+text_unethical = { review = 0.6 }
+text_self_harm = { review = 0.6 }
+text_extremism = { reject = 1.0 }
+text_link_adult = { reject = 1.0 }
+text_link_gambling = { reject = 1.0 }
+text_link_unsafe = { reject = 1.0 }
+text_profanity = { review = 1.0 }
+text_pii_phone = { review = 1.0 }
+text_pii_email = { review = 1.0 }
+text_pii_iban = { reject = 1.0 }
+text_pii_card = { reject = 1.0 }
+text_messaging_handoff = { review = 1.0 }
+text_scam = { review = 1.0 }
+qr_link_adult = { reject = 1.0 }
+qr_link_gambling = { reject = 1.0 }
+qr_link_unsafe = { reject = 1.0 }
+qr_code = { review = 1.0 }
 
 [workflows.strict.text]
 text_unsafe = { reject = 0.6, review = 0.4 }
@@ -298,3 +381,7 @@ messaging_handoff = { reject = 1.0 }
 spam = { reject = 1.0 }
 scam = { reject = 1.0 }
 profanity = { review = 1.0 }
+extremism = { reject = 1.0 }
+link_adult = { reject = 1.0 }
+link_gambling = { reject = 1.0 }
+link_unsafe = { reject = 1.0 }
