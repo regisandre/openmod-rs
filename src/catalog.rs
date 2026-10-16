@@ -30,6 +30,23 @@ const BUILTIN: &[(&str, &str, &str)] = &[
         "This content is sexually suggestive.",
     ),
     (
+        "underwear",
+        "Underwear",
+        "This content shows people in underwear or lingerie.",
+    ),
+    (
+        "swimwear",
+        "Swimwear",
+        "This content shows people in swimwear.",
+    ),
+    (
+        "minor",
+        "Minor",
+        "This content shows children or teenagers.",
+    ),
+    ("knife", "Knife", "This content shows a knife."),
+    ("cannabis", "Cannabis", "This content shows cannabis."),
+    (
         "gore",
         "Gore",
         "This content shows gore, blood or graphic injuries.",

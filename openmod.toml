@@ -65,55 +65,121 @@ pixel_range = "unit"
 logit_scale = 4.7649970054626465
 logit_bias = -12.9324369430542
 
-# `shift` moves each category's decision boundary to a score of 0.5. The
-# values below were measured on the bundled evaluation corpus with
-# `openmod eval` + `tools/calibrate.py`; re-measure on your own content.
+# `negatives` describe what is often mistaken for a category: an image closer
+# to a negative than to every prompt scores low. `shift` moves the decision
+# boundary to a score of 0.5. Both were tuned on the bundled corpus and on
+# 985 real party photos and event posters, so that about 1 in 200 of them
+# scores 0.5 or more in any one category (checked on 926 other ones).
+# Re-measure on your own content.
 [models.siglip.concepts]
-weapon = { shift = 6.5, prompts = [
+weapon = { shift = 10.0, prompts = [
   "a photo of a gun",
   "a photo of a handgun",
   "a photo of a rifle",
-  "a person holding a gun",
-  "a photo of a knife used as a weapon",
+], negatives = [
+  "a photo of a knife",
+  "a photo of a person holding a microphone",
 ] }
-alcohol = { shift = 6.5, prompts = [
+knife = { shift = 8.7, prompts = [
+  "a photo of a knife",
+], negatives = [
+  "a photo of a person",
+] }
+drugs = { shift = 5.4, prompts = [
+  "a photo of drugs",
+  "a photo of pills and white powder",
+  "a photo of a syringe",
+  "a photo of a line of cocaine",
+  "a photo of cocaine",
+], negatives = [
+  "a photo of cannabis",
+] }
+cannabis = { shift = 9.3, prompts = [
+  "a photo of cannabis",
+  "a photo of a marijuana joint",
+  "a photo of a cannabis leaf",
+], negatives = [
+  "a photo of a person",
+] }
+alcohol = { shift = 8.7, prompts = [
   "a photo of a bottle of beer",
   "a photo of a glass of wine",
   "a photo of a cocktail",
   "a photo of bottles of liquor",
+], negatives = [
+  "a photo of people dancing in a nightclub",
+  "a photo of a glass of water",
+  "a photo of coffee",
 ] }
-drugs = { shift = 6.6, prompts = [
-  "a photo of drugs",
-  "a photo of pills and powder",
-  "a photo of a syringe",
-  "a photo of cannabis",
-  "a photo of a line of cocaine",
-] }
-smoking = { shift = 8.1, prompts = [
+smoking = { shift = 3.0, prompts = [
   "a photo of a person smoking a cigarette",
   "a photo of cigarettes",
-  "a photo of a vape",
+  "a photo of a cigar",
 ] }
-suggestive = { shift = 4.6, prompts = [
+underwear = { shift = 5.3, prompts = [
+  "a photo of a woman in lingerie",
+  "a photo of a person in underwear",
+  "a photo of a man in his underwear",
+], negatives = [
+  "a photo of a shirtless man at a party",
+  "a photo of a person in a swimsuit",
+] }
+swimwear = { shift = 0.8, prompts = [
+  "a photo of a woman in a bikini",
+  "a photo of a person in a swimsuit",
+  "a photo of a man in swim trunks",
+], negatives = [
+  "a photo of a woman in lingerie",
+  "a photo of a person in underwear",
+] }
+suggestive = { shift = 3.0, prompts = [
   "a photo of a person in lingerie",
   "a photo of a person in a bikini",
   "a sexy photo",
+], negatives = [
+  "a photo of a shirtless man at a party",
+  "a photo of people dancing in a nightclub",
 ] }
-hate_symbol = { shift = 3.3, prompts = [
+hate_symbol = { shift = 3.7, prompts = [
   "a photo of a nazi swastika flag",
-  "a photo of a ku klux klan hood",
+  "a photo of ku klux klan members in white robes",
   "a photo of a nazi salute",
+  "a photo of a confederate flag",
 ] }
-offensive_gesture = { shift = 6.3, prompts = [
+offensive_gesture = { shift = 10.8, prompts = [
   "a photo of a hand showing the middle finger",
+  "a photo of a middle finger",
+], negatives = [
+  "a photo of a person",
 ] }
-violence = { shift = 5.9, prompts = [
+violence = { shift = 2.1, prompts = [
   "a photo of people fighting",
   "a photo of a violent assault",
+  "a photo of a riot",
+], negatives = [
+  "a photo of people dancing at a party",
 ] }
-gore = { shift = 3.0, prompts = [
-  "a photo of blood and gore",
+gore = { shift = 9.0, prompts = [
   "a photo of a bloody wound",
+  "a photo of a gunshot wound",
+], negatives = [
+  "a photo of a person",
+  "a photo of a person in red light",
+] }
+self_harm = { shift = 5.9, prompts = [
+  "a photo of scars from self-harm on a forearm",
+  "a photo of self-harm cuts on an arm",
+  "a photo of a razor blade and blood",
+] }
+minor = { shift = 4.3, prompts = [
+  "a photo of kids",
+  "a photo of children playing",
+  "a photo of a schoolboy",
+  "a photo of a schoolgirl",
+  "a photo of a family with children",
+], negatives = [
+  "a photo of a young man",
+  "a photo of a DJ",
 ] }
 
 # GLiGuard (GLiNER2-Guardrails-PII-Multi, mDeBERTa-v3, Apache-2.0): reads the
@@ -152,15 +218,24 @@ path = "models/qwen3guard-q4.onnx"
 tokenizer = "models/qwen3guard-tokenizer.json"
 second_opinion = { category = "text_unsafe", low = 0.2, high = 1.0 }
 
+# How the scores several models give one category combine: "max" (the
+# default) lets any model flag on its own, "mean" makes them agree. Nudity
+# takes the mean of Marqo and Owen: on real party photos, each one alone
+# flagged shirtless dancers and pink posters the other let through.
+[combine]
+nudity = "mean"
+
 # ------------------------------------------------------------- workflows
 # Only the models that score a category listed in the workflow run.
 
 [workflows.default.image]
 nudity = { reject = 0.8, review = 0.5 }
 gore = { reject = 0.8, review = 0.5 }
-weapon = { reject = 0.7, review = 0.5 }
-hate_symbol = { reject = 0.7, review = 0.5 }
+weapon = { reject = 0.8, review = 0.5 }
+hate_symbol = { reject = 0.8, review = 0.5 }
+self_harm = { reject = 0.8, review = 0.5 }
 drugs = { review = 0.5 }
+minor = { review = 0.5 }
 
 [workflows.default.text]
 # `text_unsafe` is the overall verdict; a category never scores above it, so
@@ -184,18 +259,24 @@ scam = { review = 1.0 }
 [workflows.nudity_only.image]
 nudity = { reject = 0.8, review = 0.5 }
 
-# Everything an events platform usually screens, strict.
+# Everything openmod can check, strict.
 [workflows.strict.image]
 nudity = { reject = 0.6, review = 0.4 }
+underwear = { reject = 0.6, review = 0.4 }
+swimwear = { review = 0.5 }
 suggestive = { review = 0.5 }
 gore = { reject = 0.6, review = 0.4 }
-violence = { review = 0.5 }
+violence = { reject = 0.6, review = 0.4 }
+self_harm = { reject = 0.6, review = 0.4 }
 weapon = { reject = 0.6, review = 0.4 }
+knife = { review = 0.5 }
 drugs = { reject = 0.6, review = 0.4 }
+cannabis = { review = 0.5 }
 alcohol = { review = 0.5 }
 smoking = { review = 0.5 }
 hate_symbol = { reject = 0.6, review = 0.4 }
 offensive_gesture = { review = 0.5 }
+minor = { review = 0.4 }
 
 [workflows.strict.text]
 text_unsafe = { reject = 0.6, review = 0.4 }

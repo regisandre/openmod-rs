@@ -48,6 +48,32 @@ classes = ["NSFW", "SFW"]
 categories = { NSFW = "nudity" }
 "#;
 
+const ZERO_SHOT_NEGATIVES: &str = r#"
+[models.zs]
+kind = "image_zero_shot"
+vision = "v.onnx"
+text = "t.onnx"
+tokenizer = "tok.json"
+size = 224
+logit_scale = 4.7
+logit_bias = -12.9
+[models.zs.concepts]
+violence = { shift = 5.9, prompts = ["people fighting"], negatives = ["people dancing"] }
+"#;
+
+const ZERO_SHOT_MISSPELLED: &str = r#"
+[models.zs]
+kind = "image_zero_shot"
+vision = "v.onnx"
+text = "t.onnx"
+tokenizer = "tok.json"
+size = 224
+logit_scale = 4.7
+logit_bias = -12.9
+[models.zs.concepts]
+violence = { shift = 5.9, prompts = ["people fighting"], negative = ["people dancing"] }
+"#;
+
 const TEXT_MODELS: &str = r#"
 [models.gliguard]
 kind = "text_classifier"
@@ -74,6 +100,7 @@ fn parse(text: &str) -> Result<Config, String> {
 
 #[test]
 fn config_validation_refuses_what_would_silently_disable_a_rule() {
+    let no_prompt = ZERO_SHOT_NEGATIVES.replace("[\"people fighting\"]", "[]");
     // (case, models, workflows, expected error fragment or None when valid)
     let cases: Vec<(&str, &str, &str, Option<&str>)> = vec![
         (
@@ -142,6 +169,42 @@ fn config_validation_refuses_what_would_silently_disable_a_rule() {
             "[workflows.default.image]\nnudity = { reject = 0.8 }",
             Some("unknown setting `enabeld`"),
         ),
+        (
+            "a category combined as a mean",
+            MODELS,
+            "[workflows.default.image]\nnudity = { reject = 0.8 }\n[combine]\nnudity = \"mean\"",
+            None,
+        ),
+        (
+            "combining a category no model scores",
+            MODELS,
+            "[workflows.default.image]\nnudity = { reject = 0.8 }\n[combine]\nnudty = \"mean\"",
+            Some("`nudty`"),
+        ),
+        (
+            "an unknown way to combine",
+            MODELS,
+            "[workflows.default.image]\nnudity = { reject = 0.8 }\n[combine]\nnudity = \"median\"",
+            Some("median"),
+        ),
+        (
+            "a concept with negative prompts",
+            ZERO_SHOT_NEGATIVES,
+            "[workflows.default.image]\nviolence = { reject = 0.8 }",
+            None,
+        ),
+        (
+            "a concept with negatives but no prompt",
+            &no_prompt,
+            "[workflows.default.image]\nviolence = { reject = 0.8 }",
+            Some("no prompt"),
+        ),
+        (
+            "a misspelled concept setting is refused",
+            ZERO_SHOT_MISSPELLED,
+            "[workflows.default.image]\nviolence = { reject = 0.8 }",
+            Some("negative"),
+        ),
     ];
     for (case, models, workflows, expected) in cases {
         let result = parse(&format!("{models}\n{workflows}"));
@@ -184,6 +247,23 @@ fn a_second_opinion_without_its_first_pass_runs_on_every_text() {
             .map(|(n, s)| (n.to_string(), s))
             .collect();
         assert_eq!(got, expected, "{case}");
+    }
+}
+
+#[test]
+fn every_category_of_the_default_config_has_its_own_title_and_message() {
+    let config = parse(DEFAULT_CONFIG).unwrap();
+    let catalog = openmod::catalog::Catalog::builtin();
+    let categories = config
+        .known_categories(true)
+        .into_iter()
+        .chain(config.known_categories(false));
+    for category in categories {
+        let label = catalog.label(&category);
+        assert!(
+            !label.message.starts_with("This content was flagged for"),
+            "`{category}` falls back to the generic message"
+        );
     }
 }
 

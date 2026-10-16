@@ -11,7 +11,7 @@ use crate::files::write_atomic;
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use subtle::ConstantTimeEq;
 
@@ -193,5 +193,72 @@ impl KeySet {
         self.digests
             .iter()
             .fold(false, |ok, k| ok | bool::from(k.ct_eq(&d)))
+    }
+}
+
+/// When the state file last changed, as far as a `stat` can tell.
+type Stamp = Option<(SystemTime, u64)>;
+
+fn stamp(path: &Path) -> Stamp {
+    let meta = std::fs::metadata(path).ok()?;
+    Some((meta.modified().ok()?, meta.len()))
+}
+
+/// The accepted keys, kept in step with the state file: a key created or
+/// revoked by `openmod key` in another process applies at the next request,
+/// without a restart. One `stat` per call; the file is read again only when
+/// its modification time or size changed.
+pub struct LiveKeys {
+    external: KeySet,
+    state_path: PathBuf,
+    seen: Stamp,
+    keys: KeySet,
+}
+
+impl LiveKeys {
+    /// `external`: the keys from the environment and `api_keys_file`, which
+    /// do not change while the server runs.
+    pub fn load(external: KeySet, state_path: &Path) -> Result<LiveKeys> {
+        let seen = stamp(state_path);
+        let mut keys = external.clone();
+        keys.extend_state(&State::load(state_path)?);
+        Ok(LiveKeys {
+            external,
+            state_path: state_path.to_path_buf(),
+            seen,
+            keys,
+        })
+    }
+
+    /// The keys, re-read first if the state file changed. A file that no
+    /// longer parses keeps the keys already loaded, and says so once.
+    pub fn current(&mut self) -> &KeySet {
+        let now = stamp(&self.state_path);
+        if now != self.seen {
+            self.seen = now;
+            match State::load(&self.state_path) {
+                Ok(state) => {
+                    let mut keys = self.external.clone();
+                    keys.extend_state(&state);
+                    self.keys = keys;
+                }
+                Err(e) => tracing::error!(
+                    error = %format!("{e:#}"),
+                    "the state file changed but does not parse: keeping the API keys loaded before"
+                ),
+            }
+        }
+        &self.keys
+    }
+
+    /// Replaces the external keys, e.g. after `api_keys_file` changed, and
+    /// re-reads the state file.
+    pub fn reload(&mut self, external: KeySet) -> Result<()> {
+        let mut keys = external.clone();
+        keys.extend_state(&State::load(&self.state_path)?);
+        self.external = external;
+        self.seen = stamp(&self.state_path);
+        self.keys = keys;
+        Ok(())
     }
 }

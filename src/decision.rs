@@ -1,6 +1,7 @@
 //! Turns detector scores into a decision, following one workflow.
 
 use crate::catalog::Catalog;
+use crate::config::Combine;
 use crate::workflow::Workflow;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -57,6 +58,41 @@ pub fn best_scores(scores: &[Score]) -> BTreeMap<String, Score> {
         }
     }
     best
+}
+
+/// Applies `[combine]`: the scores of a category configured as `mean` become
+/// one score, the mean of each model's best. Every other score is kept, and
+/// `best_scores` later picks the highest.
+pub fn combine_scores(scores: Vec<Score>, rules: &BTreeMap<String, Combine>) -> Vec<Score> {
+    let mean = |c: &str| rules.get(c) == Some(&Combine::Mean);
+    // category -> model -> that model's best score, in first-seen model order
+    let mut per_model: BTreeMap<String, Vec<(String, f32)>> = BTreeMap::new();
+    let mut out = Vec::with_capacity(scores.len());
+    for s in scores {
+        if !mean(&s.category) {
+            out.push(s);
+            continue;
+        }
+        let models = per_model.entry(s.category).or_default();
+        match models.iter_mut().find(|(m, _)| *m == s.source) {
+            Some((_, best)) => *best = best.max(s.score),
+            None => models.push((s.source, s.score)),
+        }
+    }
+    for (category, models) in per_model {
+        let score = models.iter().map(|(_, s)| s).sum::<f32>() / models.len() as f32;
+        let source = models
+            .into_iter()
+            .map(|(m, _)| m)
+            .collect::<Vec<_>>()
+            .join("+");
+        out.push(Score {
+            category,
+            score,
+            source,
+        });
+    }
+    out
 }
 
 /// Merges a second model's scores into the first ones: a category both

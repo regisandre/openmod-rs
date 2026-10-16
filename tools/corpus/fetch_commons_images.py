@@ -22,6 +22,10 @@ BLOCK = re.compile(r"\b(child|children|kid|kids|boy|boys|girl|girls|baby|babies|
                    r"minor|minors|putto|putti|cupid|cupids|amor|school|schoolgirl|schoolboy|youth|juvenile|young|"
                    r"pornograph\w*|porn|erotic|explicit|sex|sexual|fetish|bdsm|genital\w*|penis|vagina|"
                    r"enfant|kind|kinder|nino|nina|bambino|bambini)\b", re.I)
+# For the minors group: anything that could show a child undressed is left out.
+BLOCK_BARE = re.compile(r"\b(nude|nudes|nudity|naked|bare|bath|bathing|bathtub|shower|swim|swimming|swimsuit|"
+                        r"bikini|beach|pool|underwear|diaper|diapers|topless|shirtless|pornograph\w*|porn|erotic|"
+                        r"explicit|sex|sexual|fetish|genital\w*|abuse)\b", re.I)
 BLOCK_MINORS = re.compile(r"\b(child|children|kid|kids|boy|boys|girl|girls|baby|babies|infant|toddler|teen|teens|"
                           r"teenager|minor|minors|youth|juvenile|young|schoolgirl|schoolboy)\b", re.I)
 
@@ -69,6 +73,29 @@ CATS = {
  "text_in_image": ("reject", 10, [
    "graffiti profanity insult", "poster with phone number", "advertisement phone number flyer",
    "insulting sign", "scam spam flyer", "rude sign text"]),
+ # Added for the `underwear`, `swimwear`, `self_harm`, `minor` and `cannabis` concepts.
+ "underwear": ("reject", 25, [
+   "lingerie fashion show runway", "lingerie model photoshoot", "underwear model male", "boxer briefs model",
+   "men's underwear advertisement", "bra and panties", "lingerie advertisement", "underwear fashion show"]),
+ "swimwear": ("safe", 20, [
+   "bikini beach woman", "swimsuit fashion show", "swimwear model photoshoot", "men swim trunks beach",
+   "one-piece swimsuit woman", "beach volleyball players", "lifeguard on beach"]),
+ "self_harm": ("reject", 15, [
+   "self-harm scars", "self harm cutting scars arm", "self-inflicted wounds forearm", "cutting scars wrist",
+   "self-harm awareness", "scars on forearm"]),
+ # Everyday photos only. A nightlife platform keeps minors' photos out, so the
+ # detector needs to see them; nothing undressed is ever fetched (BLOCK_BARE).
+ "minors": ("reject", 80, [
+   "children playing playground", "school children classroom", "kids birthday party", "child portrait smiling",
+   "toddler playing toys", "boy playing football", "girl riding bicycle", "children at a festival",
+   "family picnic children", "teenagers in school uniform", "kids concert audience", "children choir",
+   "child portrait", "schoolboy portrait", "schoolgirl portrait", "teenage girl portrait", "teenage boy portrait",
+   "kindergarten children", "children selfie", "father and son", "mother and daughter", "children dancing"]),
+ "violence": ("reject", 25, [
+   "street fight", "fistfight", "brawl", "riot police clash with protesters", "bar fight", "people fighting street",
+   "police beating protester", "punch in the face fight", "football hooligans fighting"]),
+ "cannabis": ("review", 15, [
+   "cannabis plant", "marijuana joint", "cannabis buds", "hashish", "cannabis leaf", "cannabis dispensary"]),
 }
 
 
@@ -148,7 +175,7 @@ for cat, (expected, target, queries) in CATS.items():
                 continue
             if min(ii.get("width", 0), ii.get("height", 0)) < 300:
                 continue
-            blocker = BLOCK_MINORS if cat == "gore_blood" else BLOCK
+            blocker = {"gore_blood": BLOCK_MINORS, "minors": BLOCK_BARE}.get(cat, BLOCK)
             if blocker.search(text):
                 print("  skip block:", title)
                 continue

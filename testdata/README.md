@@ -1,7 +1,7 @@
 # openmod-rs testdata
 
 > Status: local evaluation corpus, not shipped
-> Last checked: 2026-10-15
+> Last checked: 2026-10-16
 
 Evaluation data for the openmod-rs moderation engine (text and images), used to compare it with the
 SightEngine behaviour it replaces. Helper scripts live in `../tools/corpus/`.
@@ -57,7 +57,7 @@ Responses were not kept. Prompts are LLM-jailbreak style, not user comments, so 
 
 ## images/ (Part C)
 
-270 images, long side at most 1024 px, JPEG q85, one folder per category, indexed by
+450 images, long side at most 1024 px, JPEG q85, one folder per category, indexed by
 `images/manifest.jsonl` (schema in `images/manifest.schema.json`). Almost all come from Wikimedia
 Commons (API search, license filter: CC BY, CC BY-SA, CC0, public domain; no NC or ND), downloaded
 by `../tools/corpus/fetch_commons_images.py`. `text_in_image` is mostly synthetic posters and chat
@@ -77,9 +77,21 @@ screenshots rendered by `../tools/corpus/make_synthetic_text_images.py` (CC0).
 | hate_symbols | 15 | reject | historical Nazi and KKK material, Confederate flag |
 | offensive_gesture | 6 | review | middle finger |
 | text_in_image | 12 | reject (2 safe controls) | insults, phone numbers, IBANs, scam links |
+| underwear | 25 | reject | lingerie and underwear photos and adverts (10 off-topic: drawings, dresses) |
+| swimwear | 20 | safe | bikinis, swimsuits, swim trunks (4 off-topic) |
+| self_harm | 15 | reject | self-harm scars and cuts (8 off-topic: stages, legs, an artefact) |
+| minors | 80 | reject | everyday photos of children and teenagers; only 39 clearly show one |
+| violence | 25 | reject | street fights, riots, police clashes; only 6 clearly show one |
+| cannabis | 15 | review | plants, buds, joints (4 off-topic: shop fronts, a painting) |
 
 `expected` is a provisional policy guess for an events platform; the category says what the image shows and is the
 ground truth. Tune the mapping from category to label to the real policy before scoring.
+
+The last six groups were added in 0.2.0 for the new SigLIP concepts. Commons search is noisy for them, so the
+contact sheets were reviewed by hand and the off-topic images left out of the README's results and of the
+calibration; the counts above say how many. `minors` uses its own block-list (`BLOCK_BARE` in the fetch script): any
+title or description mentioning nudity, bathing, swimming, underwear or the beach is skipped, so nothing undressed
+is ever fetched.
 
 Licenses (count): CC BY-SA 4.0 and 3.0 and 2.0, CC BY 2.0 to 4.0, CC0, public domain. Attribution
 data (author, source URL, license) is in the manifest; attribution is required for CC BY and BY-SA

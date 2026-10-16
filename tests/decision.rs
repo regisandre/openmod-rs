@@ -206,6 +206,49 @@ fn a_second_opinion_is_averaged_only_where_both_models_speak() {
 }
 
 #[test]
+fn a_category_several_models_score_combines_as_configured() {
+    use openmod::config::Combine;
+    use openmod::decision::{best_scores, combine_scores};
+
+    let rules: BTreeMap<String, Combine> = [("nudity".to_string(), Combine::Mean)].into();
+    // (case, scores, category, expected score and source)
+    let cases: Vec<(&str, Vec<Score>, &str, (f32, &str))> = vec![
+        (
+            "mean: each model's best score, averaged",
+            vec![
+                score("nudity", 0.9, "marqo"),
+                score("nudity", 0.3, "owen"),
+                score("nudity", 0.5, "owen"),
+            ],
+            "nudity",
+            (0.7, "marqo+owen"),
+        ),
+        (
+            "mean with a single model: its own score",
+            vec![score("nudity", 0.9, "marqo")],
+            "nudity",
+            (0.9, "marqo"),
+        ),
+        (
+            "any other category: the highest score",
+            vec![score("gore", 0.8, "owen"), score("gore", 0.2, "siglip")],
+            "gore",
+            (0.8, "owen"),
+        ),
+    ];
+    for (case, scores, category, (expected, source)) in cases {
+        let best = best_scores(&combine_scores(scores, &rules));
+        let got = best.get(category).expect(case);
+        assert!(
+            (got.score - expected).abs() < 1e-6,
+            "{case}: score {} != {expected}",
+            got.score
+        );
+        assert_eq!(got.source, source, "{case}: source");
+    }
+}
+
+#[test]
 fn a_text_category_never_outscores_the_overall_verdict() {
     let rules_hit = score("pii_phone", 1.0, "rules");
     // (case, scores, category to read, expected score)

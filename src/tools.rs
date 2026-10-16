@@ -113,7 +113,7 @@ pub const TOOLS: &[Tool] = &[
         id: "owen_safety",
         name: "Owen safety",
         kind: Kind::Image,
-        summary: "Nudity and gore, a second opinion that catches what the first misses.",
+        summary: "Nudity and gore. Its nudity score is averaged with Marqo's, which cancels the mistakes each makes alone.",
         ram_mb: 18,
         license: "MIT",
         files: &[File {
@@ -131,7 +131,7 @@ pub const TOOLS: &[Tool] = &[
         id: "siglip",
         name: "SigLIP",
         kind: Kind::Image,
-        summary: "Weapons, drugs, alcohol, smoking, hate symbols, gestures, violence: any concept you describe in words.",
+        summary: "Weapons, drugs, underwear, minors, self-harm, hate symbols, violence, gore and more: any concept you describe in words.",
         ram_mb: 227,
         license: "Apache-2.0",
         files: &[

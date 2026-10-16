@@ -11,9 +11,10 @@ dump = sys.argv[1]
 budget = float(sys.argv[2]) if len(sys.argv) > 2 else 0.02
 target = {  # score key -> corpus categories that should trigger it
     "nudity": ["nudity_artistic"], "suggestive": ["suggestive"], "gore": ["gore_blood"],
-    "weapon": ["weapons"], "alcohol": ["alcohol"], "drugs": ["drugs"], "smoking": ["smoking"],
-    "hate_symbol": ["hate_symbols"], "offensive_gesture": ["offensive_gesture"],
-    "violence": ["gore_blood"], "self_harm": ["gore_blood"],
+    "weapon": ["weapons"], "knife": ["weapons"], "alcohol": ["alcohol"], "drugs": ["drugs"],
+    "cannabis": ["cannabis"], "smoking": ["smoking"], "hate_symbol": ["hate_symbols"],
+    "offensive_gesture": ["offensive_gesture"], "violence": ["violence"], "self_harm": ["self_harm"],
+    "underwear": ["underwear"], "swimwear": ["swimwear"], "minor": ["minors"],
 }
 rows = [json.loads(l) for l in open(dump, encoding="utf-8") if l.strip()]
 safe = [r for r in rows if r["category"].startswith("safe_")]

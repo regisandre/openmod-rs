@@ -2,7 +2,9 @@
 
 use crate::catalog::{Catalog, Label};
 use crate::config::{Config, ModelSpec, RULE_CATEGORIES, SecondOpinion};
-use crate::decision::{Score, Summary, average_opinions, best_scores, cap_to_verdict, evaluate};
+use crate::decision::{
+    Score, Summary, average_opinions, best_scores, cap_to_verdict, combine_scores, evaluate,
+};
 use crate::image_input::{DecodeError, decode};
 use crate::models::gliner::Gliner;
 use crate::models::onnx::{Classifier, Runtime, ZeroShot};
@@ -395,6 +397,7 @@ impl Engine {
         unchecked: Vec<String>,
         start: Instant,
     ) -> Report {
+        let scores = combine_scores(scores, &self.config.combine);
         let summary = evaluate(wf, &scores, &self.catalog);
         let scores = best_scores(&scores)
             .into_iter()

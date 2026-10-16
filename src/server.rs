@@ -5,7 +5,7 @@ use crate::admin::{self, Sessions};
 use crate::config::Config;
 use crate::download::Downloads;
 use crate::engine::{CheckError, Engine, Report};
-use crate::keys::{KeySet, State};
+use crate::keys::{KeySet, LiveKeys, State};
 use anyhow::{Context, Result, bail};
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Multipart, Query, State as Extract};
@@ -28,7 +28,7 @@ const QUEUE_TIMEOUT: Duration = Duration::from_secs(30);
 /// one consistent version.
 pub struct App {
     engine: RwLock<Arc<Engine>>,
-    keys: RwLock<KeySet>,
+    keys: Mutex<LiveKeys>,
     permits: Semaphore,
     pub config_path: PathBuf,
     pub state_path: PathBuf,
@@ -61,18 +61,24 @@ impl App {
     /// Re-reads the external keys and the state file.
     pub fn reload_keys(&self) -> Result<()> {
         let engine = self.engine();
-        let mut keys = KeySet::external(engine.config.server.api_keys_file.as_deref())?;
-        keys.extend_state(&State::load(&self.state_path)?);
-        *self.keys.write().unwrap_or_else(|e| e.into_inner()) = keys;
-        Ok(())
+        let external = KeySet::external(engine.config.server.api_keys_file.as_deref())?;
+        self.keys
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .reload(external)
     }
 
     pub fn key_count(&self) -> usize {
-        self.keys.read().unwrap_or_else(|e| e.into_inner()).len()
+        self.keys
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .current()
+            .len()
     }
 
     fn require_key(&self, presented: Option<&str>) -> Result<(), ApiError> {
-        let keys = self.keys.read().unwrap_or_else(|e| e.into_inner());
+        let mut live = self.keys.lock().unwrap_or_else(|e| e.into_inner());
+        let keys = live.current();
         if keys.is_empty() {
             if self.allow_unauthenticated {
                 return Ok(());
@@ -412,9 +418,11 @@ pub async fn serve(config_path: PathBuf, engine: Engine) -> Result<()> {
         }
     }
 
-    let mut keys = KeySet::external(config.server.api_keys_file.as_deref())?;
-    keys.extend_state(&state);
-    if keys.is_empty() {
+    let mut keys = LiveKeys::load(
+        KeySet::external(config.server.api_keys_file.as_deref())?,
+        &state_path,
+    )?;
+    if keys.current().is_empty() {
         if config.server.allow_unauthenticated {
             if !api_addr.ip().is_loopback() {
                 bail!("refusing to serve without API keys on a non-loopback address ({api_addr})");
@@ -428,7 +436,7 @@ pub async fn serve(config_path: PathBuf, engine: Engine) -> Result<()> {
     let limit = config.server.max_upload_bytes;
     let app: Shared = Arc::new(App {
         engine: RwLock::new(Arc::new(engine)),
-        keys: RwLock::new(keys),
+        keys: Mutex::new(keys),
         permits: Semaphore::new(config.server.max_concurrent.max(1)),
         config_path,
         state_path,

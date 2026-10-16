@@ -145,7 +145,25 @@ impl Classifier {
 struct Concept {
     category: String,
     shift: f32,
+    /// A negative prompt: what the category is often confused with.
+    negative: bool,
     embedding: Vec<f32>,
+}
+
+/// The score of a zero-shot category, from the cosine similarity of the image
+/// to its best-matching prompt (`pos`) and to its best-matching negative
+/// prompt (`neg`), if it has any. SigLIP's own probability for the prompt,
+/// moved by `shift`, is multiplied by the probability that the image shows
+/// the prompt rather than the negative (a two-way softmax at SigLIP's
+/// temperature): an image closer to a negative than to every prompt scores
+/// low, whatever its absolute similarity.
+pub fn concept_score(pos: f32, neg: Option<f32>, scale: f32, bias: f32, shift: f32) -> f32 {
+    let sigmoid = |x: f32| 1.0 / (1.0 + (-x).exp());
+    let p = sigmoid(pos * scale + bias + shift);
+    match neg {
+        Some(n) => p * sigmoid((pos - n) * scale),
+        None => p,
+    }
 }
 
 /// SigLIP vision tower plus prompt embeddings computed once at startup. The
@@ -205,11 +223,14 @@ impl ZeroShot {
         let mut pairs = Vec::new();
         for (category, spec) in concepts {
             for p in spec.prompts() {
-                pairs.push((category.clone(), spec.shift(), p.clone()));
+                pairs.push((category.clone(), spec.shift(), false, p.clone()));
+            }
+            for p in spec.negatives() {
+                pairs.push((category.clone(), spec.shift(), true, p.clone()));
             }
         }
         let mut ids = Vec::with_capacity(pairs.len() * SIGLIP_TEXT_LEN);
-        for (_, _, p) in &pairs {
+        for (_, _, _, p) in &pairs {
             let enc = tok
                 .encode(canonical_prompt(p), true)
                 .map_err(|e| anyhow::anyhow!("tokenizing `{p}`: {e}"))?;
@@ -236,9 +257,10 @@ impl ZeroShot {
         let concepts = pairs
             .into_iter()
             .zip(embeddings)
-            .map(|((category, shift, _), embedding)| Concept {
+            .map(|((category, shift, negative, _), embedding)| Concept {
                 category,
                 shift,
+                negative,
                 embedding,
             })
             .collect();
@@ -253,7 +275,7 @@ impl ZeroShot {
         })
     }
 
-    /// One score per category: the best-matching prompt's sigmoid probability.
+    /// One score per category, see [`concept_score`].
     pub fn run(&self, img: &RgbImage, wanted: &dyn Fn(&str) -> bool) -> Result<Vec<Score>> {
         let s = self.input.size as usize;
         let tensor = Tensor::from_array(([1usize, 3, s, s], to_tensor(img, &self.input)))?;
@@ -268,7 +290,8 @@ impl ZeroShot {
         };
         normalize(&mut image_embedding);
 
-        let mut best: BTreeMap<&str, f32> = BTreeMap::new();
+        // category -> (shift, best prompt similarity, best negative similarity)
+        let mut best: BTreeMap<&str, (f32, f32, Option<f32>)> = BTreeMap::new();
         for c in self.concepts.iter().filter(|c| wanted(&c.category)) {
             let cos: f32 = c
                 .embedding
@@ -276,16 +299,20 @@ impl ZeroShot {
                 .zip(&image_embedding)
                 .map(|(a, b)| a * b)
                 .sum();
-            let logit = cos * self.scale + self.bias + c.shift;
-            let p = 1.0 / (1.0 + (-logit).exp());
-            let entry = best.entry(&c.category).or_insert(0.0);
-            *entry = entry.max(p);
+            let entry = best
+                .entry(&c.category)
+                .or_insert((c.shift, f32::NEG_INFINITY, None));
+            if c.negative {
+                entry.2 = Some(entry.2.map_or(cos, |n: f32| n.max(cos)));
+            } else {
+                entry.1 = entry.1.max(cos);
+            }
         }
         Ok(best
             .into_iter()
-            .map(|(category, p)| Score {
+            .map(|(category, (shift, pos, neg))| Score {
                 category: category.to_string(),
-                score: p,
+                score: concept_score(pos, neg, self.scale, self.bias, shift),
                 source: self.name.clone(),
             })
             .collect())

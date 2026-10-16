@@ -1,6 +1,6 @@
 # openmod
 
-> Status: alpha. Works end to end; thresholds calibrated on a small corpus (270 images, 486 texts in 7 languages).
+> Status: alpha. Works end to end; image thresholds calibrated on 450 corpus images and 1,911 real party photos and event posters, text thresholds on 486 texts in 7 languages.
 > Last checked: 2026-10-16
 
 Self-hosted image and text moderation in one Rust binary. CPU only, no GPU,
@@ -8,9 +8,11 @@ no Python at runtime, and nothing you check ever leaves your server.
 Configurable workflows in the spirit of SightEngine, SightEngine-compatible
 endpoints, and a small admin interface to choose what runs.
 
-- **Images**: nudity, suggestive, gore, violence, weapons, drugs, alcohol,
-  smoking, hate symbols, offensive gestures, and any other category you can
-  describe in a sentence (zero-shot, no training).
+- **Images**: nudity, underwear, swimwear, suggestive, minors, gore,
+  violence, self-harm, weapons, knives, drugs, cannabis, alcohol, smoking,
+  hate symbols, offensive gestures, and any other category you can describe
+  in a sentence (zero-shot, no training), with negative prompts for what
+  your users post that only looks like it.
 - **Texts**: unsafe content, violence, sexual content, hate, illegal
   activity, self-harm and more, in many languages (tested in de, en, es, fr,
   it, nl, uk), plus exact rules for emails, phone numbers, IBANs, card
@@ -62,8 +64,15 @@ curl -H "Authorization: Bearer $OPENMOD_KEY" --data-binary @photo.jpg \
 ```
 
 No browser at hand? `openmod fetch` downloads the models of the enabled
-tools, and `OPENMOD_API_KEYS="key1,key2"` sets API keys from the
-environment.
+tools, and `openmod key add my-app` prints a new API key.
+
+Or run the published image:
+
+```sh
+docker run -d --name openmod -v openmod-data:/data \
+  -p 8088:8088 -p 127.0.0.1:8089:8089 ghcr.io/regisandre/openmod-rs:latest
+docker logs openmod   # the admin token
+```
 
 ## Install
 
@@ -96,12 +105,18 @@ the C++ standard library at runtime.
 
 ### Docker
 
+Every release publishes an image for x86-64 Linux,
+`ghcr.io/regisandre/openmod-rs:<version>` (and `latest`):
+
 ```sh
-docker build -t openmod .
 docker run -d --name openmod -v openmod-data:/data \
-  -p 8088:8088 -p 127.0.0.1:8089:8089 openmod
-docker logs openmod   # the admin token, at first start
+  -p 8088:8088 -p 127.0.0.1:8089:8089 ghcr.io/regisandre/openmod-rs:latest
+docker logs openmod                         # the admin token, at first start
+docker exec openmod openmod fetch           # or download the models from the admin interface
+docker exec openmod openmod key add my-app  # an API key, printed once
 ```
+
+To build it yourself: `docker build -t openmod .`
 
 Everything openmod writes lives in `/data`: the configuration, the models
 and the state file. The admin port is published on the host's loopback
@@ -112,10 +127,11 @@ With Compose:
 ```yaml
 services:
   openmod:
-    build: .
+    image: ghcr.io/regisandre/openmod-rs:latest
     restart: unless-stopped
     ports: ["8088:8088", "127.0.0.1:8089:8089"]
     volumes: ["openmod-data:/data"]
+    mem_limit: 1g   # images only; 2g with the text models
 volumes:
   openmod-data:
 ```
@@ -199,7 +215,7 @@ loaded and uses no memory.
 |---|---|---|---|---|
 | Marqo NSFW | `nudity` | 27 MB | 22 MB | Apache-2.0 |
 | Owen safety | `nudity`, `gore` | 18 MB | 13 MB | MIT |
-| SigLIP | `weapon`, `drugs`, `alcohol`, `smoking`, `suggestive`, `hate_symbol`, `offensive_gesture`, `violence`, `gore`, and your own | 227 MB | 207 MB | Apache-2.0 |
+| SigLIP | `weapon`, `knife`, `drugs`, `cannabis`, `alcohol`, `smoking`, `underwear`, `swimwear`, `suggestive`, `minor`, `self_harm`, `hate_symbol`, `offensive_gesture`, `violence`, `gore`, and your own | 227 MB | 207 MB | Apache-2.0 |
 | GLiGuard | `text_unsafe` and 13 text categories | 667 MB | 484 MB | Apache-2.0 |
 | Qwen3Guard | a second opinion on risky texts | 550 MB | 529 MB | Apache-2.0 |
 | Text rules | `pii_*`, `link`, `messaging_handoff`, `spam`, `scam`, `profanity` | none | none | built in |
@@ -350,14 +366,20 @@ pii_phone = { review = 1.0 }
 messaging_handoff = { reject = 1.0 }
 ```
 
-The file ships with three: `default`, `strict` and `nudity_only`. A
-request that names no workflow uses `default`, which cannot be deleted.
+The file ships with three:
+- `default`: rejects what is plainly unacceptable, sends doubtful cases to
+  review;
+- `strict`: everything openmod can check;
+- `nudity_only`: for profile pictures.
+
+A request that names no workflow uses `default`, which cannot be deleted.
 `openmod validate` refuses a workflow that names a category no model
 produces, so a typo never silently disables a rule.
 
-**Image categories**: `nudity`, `suggestive`, `gore`, `violence`, `weapon`,
-`alcohol`, `drugs`, `smoking`, `hate_symbol`, `offensive_gesture`, plus your
-own.
+**Image categories**: `nudity`, `underwear`, `swimwear`, `suggestive`,
+`minor`, `gore`, `violence`, `self_harm`, `weapon` (firearms), `knife`,
+`drugs` (hard drugs), `cannabis`, `alcohol`, `smoking`, `hate_symbol`,
+`offensive_gesture`, plus your own.
 
 **Text categories**:
 - from the models: `text_unsafe`, `violence`, `sexual`, `hate`, `illegal`,
@@ -380,6 +402,41 @@ fireworks = { shift = 6.0, prompts = ["a photo of fireworks", "a photo of pyrote
 
 Then use `fireworks` in a workflow. `shift` moves the score so that 0.5
 sits on the boundary measured on your data (see [Calibration](#calibration)).
+
+**Negatives** name what your users post that looks like the category
+without being it. An image closer to a negative than to every prompt
+scores low:
+
+```toml
+violence = { shift = 2.1, prompts = [
+  "a photo of people fighting",
+  "a photo of a violent assault",
+], negatives = [
+  "a photo of people dancing at a party",
+] }
+```
+
+On real party photos, that one negative is what stops raised arms on a
+dance floor from reading as a fight. The score is SigLIP's own
+probability for the best prompt, times the probability that the image shows
+the prompt rather than the best negative.
+
+### Combining models
+
+When several models score one category, the highest score counts by
+default: any model can flag the content on its own. `[combine]` makes them
+agree instead:
+
+```toml
+[combine]
+nudity = "mean"
+```
+
+The shipped configuration averages Marqo and Owen for `nudity`. On 985 real
+party photos and event posters, each one alone flagged shirtless dancers and
+pink posters the other let through: 46 of them scored 0.5 or more with the
+highest score, 14 with the mean, while the artistic nudity of the corpus
+kept the same detection rate.
 
 ### Changing the text labels
 
@@ -418,6 +475,9 @@ enabled = true
 [labels.<category>]     # optional: your own title and message
 text = "Nudity"
 message = "This content contains nudity or sexual content."
+
+[combine]               # optional, per category: "max" (default) or "mean"
+nudity = "mean"
 ```
 
 | Environment variable | Effect |
@@ -438,6 +498,9 @@ The models, workflows and labels reload from the admin interface. The
 | `openmod serve` | the API and the admin interface; writes a default configuration first if there is none |
 | `openmod fetch [--all]` | downloads the model files of the enabled tools (`--all`: every configured tool) |
 | `openmod admin-token` | prints a new admin token; the old one and its sessions stop working |
+| `openmod key add <name>` | creates an API key and prints it once; a running server accepts it at its next request |
+| `openmod key list` | lists the keys: id, first characters, creation date, name |
+| `openmod key revoke <id>` | revokes a key; a running server refuses it at its next request |
 | `openmod image <file> [-w workflow]` | checks one image and prints the JSON answer |
 | `openmod text <text or -> [-w workflow]` | checks a text (`-` reads stdin) |
 | `openmod validate` | checks the configuration without loading any model, and lists the rules a disabled tool leaves unchecked |
@@ -462,11 +525,12 @@ Every command takes `-c <file>` (or `OPENMOD_CONFIG`).
   nudity-only workflow never runs SigLIP or the text models.
 
 **Images.**
-- Two small classifiers score nudity and gore.
+- Two small classifiers score nudity and gore; their nudity scores are
+  averaged (`[combine]`).
 - SigLIP scores every other category zero-shot: each category is a list of
-  English prompts in `openmod.toml`. The prompts are encoded once at
-  startup, then the text half of SigLIP is freed, so an image costs one
-  vision pass.
+  English prompts in `openmod.toml`, plus negatives, the look-alikes that
+  pull its score down. The prompts are encoded once at startup, then the
+  text half of SigLIP is freed, so an image costs one vision pass.
 
 **Texts, in order.**
 1. **Rules** read the raw text: emails, phones, IBANs (checksum), card
@@ -506,29 +570,53 @@ Every command takes `-c <file>` (or `OPENMOD_CONFIG`).
 ## Results
 
 On the corpus in `testdata/`:
-- images: 270 Wikimedia Commons images in 12 groups;
+- images: 450 Wikimedia Commons images in 18 groups (the groups added in
+  0.2.0 were reviewed by hand and their off-topic images left out);
 - texts: 486 hand-written texts in 7 languages (296 to flag, 190 safe), and
-  a 1,200-row sample of the textdetox multilingual toxicity dataset.
+  a 1,200-row sample of the textdetox multilingual toxicity dataset;
 
-The thresholds were tuned on this same corpus, so read these numbers as an
-upper bound. "Caught" counts a review or a reject.
+and on real content: 1,911 published event posters, party photos and
+artist, venue and organiser pictures from the nightlife scene. 985 of them
+were used to tune the image prompts and thresholds, the other 926 only to
+check them.
 
-**Images**, `strict` workflow, every image tool on:
+The corpus thresholds were tuned on the corpus itself, so read those numbers
+as an upper bound. "Caught" counts a review or a reject.
 
-| Group | Images | Caught |
+**Images**, every image tool on:
+
+| Group | Images | Caught, `strict` |
 |---|---|---|
-| weapons | 30 | 83% |
+| weapons (firearms, knives, swords) | 30 | 100% |
+| underwear and lingerie | 15 | 100% |
+| self-harm | 7 | 100% |
+| alcohol | 20 | 95% |
+| cannabis | 11 | 91% |
+| hate symbols | 15 | 87% |
 | offensive gesture | 6 | 83% |
-| alcohol | 20 | 80% |
-| drugs | 20 | 80% |
-| hate symbols | 15 | 80% |
-| suggestive | 15 | 73% |
-| gore and blood | 12 | 50% |
-| smoking | 10 | 50% |
-| artistic nudity (paintings, statues) | 20 | 40% |
-| text in images | 12 | 17% (no OCR yet) |
+| hard drugs | 20 | 75% |
+| swimwear | 16 | 75% |
+| violence | 6 | 67% |
+| minors (everyday photos of children) | 39 | 64% |
+| smoking | 10 | 60% |
+| suggestive | 15 | 60% |
+| gore and blood | 12 | 58% |
+| artistic nudity (paintings, statues) | 20 | 35% |
+| text in images | 12 | 0% (no OCR yet) |
 | **safe**: events, crowds, stages | 80 | 0 flagged |
-| **safe**: landscapes, portraits, products | 30 | 1 sent to review, 0 rejected |
+| **safe**: landscapes, portraits, products | 30 | 0 flagged |
+
+**Real event posters and party photos**, nothing in them meant to be
+refused:
+
+| Images | `default` rejected / sent to review | `strict` rejected / sent to review |
+|---|---|---|
+| 985 used for tuning | 0.3% / 2.2% | 1.5% / 5.8% |
+| 926 held out | 0.4% / 3.3% | 2.1% / 4.2% |
+
+Before the 0.2.0 prompts and the nudity mean, `strict` rejected 5.6% of the
+same 985 images and sent 16% to review: shirtless dancers read as nudity,
+raised arms as fights, hoods as the Ku Klux Klan.
 
 **Texts**, own corpus, every text tool on:
 
@@ -577,8 +665,8 @@ with `default`, against 78% with `strict`.
 
 ## Calibration
 
-The bundled thresholds come from a small corpus. Measure on your own
-content before relying on them:
+The bundled thresholds come from a small corpus and a sample of real
+event photos. Measure on your own content before relying on them:
 
 ```sh
 openmod eval --images my/manifest.jsonl --texts my/corpus.jsonl --workflow strict --dump scores.jsonl
@@ -593,6 +681,13 @@ python tools/category_rates.py scores.jsonl        # texts: hit rates per catego
   running the models again.
 - `testdata/README.md` describes the corpus format; the images and the
   third-party text samples are rebuilt by the scripts in `tools/corpus/`.
+- Your own content is the best calibration set. Put a few hundred of your
+  users' ordinary images in a manifest with `"expected": "safe"`, run
+  `eval` with a workflow that lists every category at `review = 0.5`, and
+  look at the images that score highest in each category: what they show is
+  what that category's `negatives` should describe. Then raise each `shift`
+  until about one image in 200 of yours scores 0.5 or more, and check the
+  result on images you did not look at.
 
 ## Security
 
@@ -634,10 +729,14 @@ Found a vulnerability? Please report it privately through GitHub's
 
 - Text inside images (posters, screenshots) is not read: there is no OCR
   yet.
-- No minor or age detection. Do not rely on openmod for child-safety
-  obligations.
-- Zero-shot image categories are only as good as their prompts. Hate
-  symbols, self-harm and violence are the hardest.
+- Minors are detected zero-shot, from the whole picture: about half of the
+  everyday photos of children, rarely a young-looking adult. There is no
+  face or age model. Do not rely on openmod for child-safety obligations.
+- Zero-shot image categories are only as good as their prompts and
+  negatives. Gore, violence, drugs and artistic nudity are the hardest.
+- Nudity was measured on paintings, statues, underwear and swimwear, not on
+  explicit photos, which the corpus leaves out on purpose. On their own
+  test sets, Marqo reports 98.6% accuracy (20,000 images) and Owen 97.8%.
 - The text models are safety guards. They judge harm, not tone: borderline
   texts (a joke, a dark mood, a drug reference) are often let through, and
   hostile political opinions are often flagged.

@@ -4,7 +4,7 @@
 
 use axum::http::{HeaderMap, HeaderValue, Method};
 use openmod::admin::{Sessions, same_origin_write, session_cookie};
-use openmod::keys::{KeySet, State};
+use openmod::keys::{KeySet, LiveKeys, State};
 use std::time::Duration;
 
 fn key_set(state: &State) -> KeySet {
@@ -96,6 +96,49 @@ fn the_state_file_keeps_digests_never_secrets() {
             .is_empty(),
         "no file, no keys"
     );
+}
+
+#[test]
+fn a_key_added_or_revoked_by_another_process_applies_without_a_restart() {
+    let path = std::env::temp_dir().join(format!("openmod-live-{}.toml", std::process::id()));
+    let mut state = State::default();
+    let first = state.add_key("first").unwrap();
+    state.save(&path).unwrap();
+    let mut live = LiveKeys::load(KeySet::default(), &path).unwrap();
+    let first_before = live.current().matches(&first);
+
+    // `openmod key add` and `openmod key revoke` edit the file while the
+    // server runs.
+    let mut other = State::load(&path).unwrap();
+    let second = other.add_key("second key").unwrap();
+    let id = other.api_keys[0].id.clone();
+    assert!(other.revoke(&id));
+    other.save(&path).unwrap();
+    let keys = live.current().clone();
+    std::fs::write(&path, "api_keys = [ half written").unwrap();
+    let after_corruption = live.current().matches(&second);
+    std::fs::remove_file(&path).unwrap();
+    let after_removal = live.current().matches(&second);
+
+    // (case, matches, expected)
+    let cases = [
+        ("a key that exists at startup", first_before, true),
+        ("a key added since", keys.matches(&second), true),
+        ("a key revoked since", keys.matches(&first), false),
+        (
+            "a state file that does not parse keeps the keys already loaded",
+            after_corruption,
+            true,
+        ),
+        (
+            "a deleted state file leaves no key of its own",
+            after_removal,
+            false,
+        ),
+    ];
+    for (case, got, expected) in cases {
+        assert_eq!(got, expected, "{case}");
+    }
 }
 
 #[test]

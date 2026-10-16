@@ -41,6 +41,12 @@ enum Command {
     /// Print a new admin token. The old one, and every session opened with
     /// it, stop working.
     AdminToken,
+    /// Create, list and revoke API keys without the admin interface. A
+    /// running server applies the change at its next request.
+    Key {
+        #[command(subcommand)]
+        action: KeyAction,
+    },
     /// Check one image file and print the JSON report.
     Image {
         file: PathBuf,
@@ -66,6 +72,30 @@ enum Command {
         #[arg(long, default_value = "eval-scores.jsonl")]
         dump: PathBuf,
     },
+}
+
+#[derive(Subcommand)]
+enum KeyAction {
+    /// Create a key and print it on stdout. It is shown this once only.
+    Add { name: String },
+    /// List the keys: id, name, first characters and creation date.
+    List,
+    /// Revoke the key with this id (see `openmod key list`).
+    Revoke { id: String },
+}
+
+/// `YYYY-MM-DD` of a Unix time, in UTC (Howard Hinnant's civil_from_days).
+fn date(unix: u64) -> String {
+    let z = (unix / 86_400) as i64 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
 }
 
 /// For the one-shot commands: every enabled model must load.
@@ -114,6 +144,30 @@ fn main() -> Result<()> {
             let token = state.rotate_admin_token();
             state.save(path)?;
             println!("{token}");
+        }
+        Command::Key { action } => {
+            let path = &config.server.state_file;
+            let mut state = State::load(path)?;
+            match action {
+                KeyAction::Add { name } => {
+                    let key = state.add_key(&name)?;
+                    state.save(path)?;
+                    eprintln!("created `{name}`: keep the key now, it is not shown again");
+                    println!("{key}");
+                }
+                KeyAction::List => {
+                    for k in &state.api_keys {
+                        println!("{}  {}...  {}  {}", k.id, k.prefix, date(k.created), k.name);
+                    }
+                }
+                KeyAction::Revoke { id } => {
+                    if !state.revoke(&id) {
+                        bail!("no key with id `{id}` (see `openmod key list`)");
+                    }
+                    state.save(path)?;
+                    eprintln!("revoked {id}");
+                }
+            }
         }
         Command::Serve => {
             let engine = Engine::load(config, None);

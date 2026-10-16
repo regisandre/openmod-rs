@@ -24,6 +24,22 @@ pub struct Config {
     /// Optional overrides of the built-in titles and messages.
     #[serde(default)]
     pub labels: BTreeMap<String, LabelSpec>,
+    /// How the scores of several models for one category combine. A
+    /// category not listed takes the highest score.
+    #[serde(default)]
+    pub combine: BTreeMap<String, Combine>,
+}
+
+/// How the scores several models give one category become one score.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Combine {
+    /// The highest score: any model can flag the content on its own.
+    #[default]
+    Max,
+    /// The mean of each model's score: the models must agree, which removes
+    /// the confident mistakes each one makes alone.
+    Mean,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -261,30 +277,47 @@ pub struct SecondOpinion {
     pub high: f32,
 }
 
-/// A zero-shot category: its prompts, and a logit shift that moves the
-/// decision boundary measured on a corpus to a score of 0.5.
+/// A zero-shot category: its prompts, a logit shift that moves the decision
+/// boundary measured on a corpus to a score of 0.5, and negatives: what your
+/// content often shows that looks like the category without being it
+/// (people dancing for `violence`). An image closer to a negative than to
+/// every prompt scores low.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(untagged)]
 pub enum ConceptSpec {
     Prompts(Vec<String>),
-    Calibrated {
-        prompts: Vec<String>,
-        #[serde(default)]
-        shift: f32,
-    },
+    Calibrated(CalibratedConcept),
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CalibratedConcept {
+    pub prompts: Vec<String>,
+    #[serde(default)]
+    pub shift: f32,
+    #[serde(default)]
+    pub negatives: Vec<String>,
 }
 
 impl ConceptSpec {
     pub fn prompts(&self) -> &[String] {
         match self {
-            ConceptSpec::Prompts(p) | ConceptSpec::Calibrated { prompts: p, .. } => p,
+            ConceptSpec::Prompts(p) => p,
+            ConceptSpec::Calibrated(c) => &c.prompts,
         }
     }
 
     pub fn shift(&self) -> f32 {
         match self {
             ConceptSpec::Prompts(_) => 0.0,
-            ConceptSpec::Calibrated { shift, .. } => *shift,
+            ConceptSpec::Calibrated(c) => c.shift,
+        }
+    }
+
+    pub fn negatives(&self) -> &[String] {
+        match self {
+            ConceptSpec::Prompts(_) => &[],
+            ConceptSpec::Calibrated(c) => &c.negatives,
         }
     }
 }
@@ -548,6 +581,11 @@ impl Config {
         if !self.workflows.contains_key("default") {
             bail!("a workflow named `default` is required");
         }
+        for category in self.combine.keys() {
+            if !image.contains(category) && !text.contains(category) {
+                bail!("[combine]: category `{category}` is not produced by any model");
+            }
+        }
         for (name, entry) in &self.models {
             let spec = &entry.spec;
             if let ModelSpec::ImageClassifier {
@@ -560,6 +598,15 @@ impl Config {
                     if !classes.contains(class) {
                         bail!(
                             "model `{name}`: class `{class}` is mapped to a category but missing from `classes`"
+                        );
+                    }
+                }
+            }
+            if let ModelSpec::ImageZeroShot { concepts, .. } = spec {
+                for (concept, c) in concepts {
+                    if c.prompts().is_empty() {
+                        bail!(
+                            "model `{name}`: concept `{concept}` has no prompt (negatives alone score nothing)"
                         );
                     }
                 }
@@ -640,6 +687,21 @@ fn check_model_keys(table: &toml::Table) -> Result<()> {
                 );
             }
         }
+        // An untagged concept with a misspelled key would fail with a vague
+        // message, or not at all: name the key.
+        let concepts = model.get("concepts").and_then(|c| c.as_table());
+        for (concept, spec) in concepts.into_iter().flatten() {
+            for key in spec.as_table().into_iter().flat_map(|t| t.keys()) {
+                if !CONCEPT_KEYS.contains(&key.as_str()) {
+                    bail!(
+                        "model `{name}`, concept `{concept}`: unknown setting `{key}` (a concept takes {})",
+                        CONCEPT_KEYS.join(", ")
+                    );
+                }
+            }
+        }
     }
     Ok(())
 }
+
+const CONCEPT_KEYS: &[&str] = &["prompts", "shift", "negatives"];
