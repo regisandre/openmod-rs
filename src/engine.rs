@@ -71,6 +71,8 @@ fn stamp(spec: &ModelSpec) -> Stamp {
 struct Slot {
     name: String,
     spec: ModelSpec,
+    /// Threads and sessions it was loaded with: other ones load it again.
+    rt: Runtime,
     stamp: Stamp,
     model: Model,
     categories: BTreeSet<String>,
@@ -96,7 +98,6 @@ pub enum ToolStatus {
 pub struct Engine {
     pub config: Config,
     catalog: Catalog,
-    threads: usize,
     slots: Vec<Slot>,
     pub status: BTreeMap<String, ToolStatus>,
     image_available: BTreeSet<String>,
@@ -214,8 +215,6 @@ impl Engine {
     /// that need it are unchecked. `previous` lends the models whose
     /// settings did not change, so a reload only loads what is new.
     pub fn load(config: Config, previous: Option<&Engine>) -> Engine {
-        let threads = config.server.threads_per_model;
-        let rt = Runtime { threads };
         let mut status = BTreeMap::new();
         let mut slots = Vec::new();
         for (name, entry) in &config.models {
@@ -236,12 +235,15 @@ impl Engine {
                 continue;
             }
             let files = stamp(&entry.spec);
+            let rt = Runtime {
+                threads: config.server.threads_per_model,
+                sessions: config.sessions(name),
+            };
             let kept = previous
-                .filter(|p| p.threads == threads)
                 .and_then(|p| {
-                    p.slots
-                        .iter()
-                        .find(|s| s.name == *name && s.spec == entry.spec && s.stamp == files)
+                    p.slots.iter().find(|s| {
+                        s.name == *name && s.spec == entry.spec && s.rt == rt && s.stamp == files
+                    })
                 })
                 .map(|s| s.model.clone());
             let model = match kept {
@@ -256,6 +258,7 @@ impl Engine {
                     slots.push(Slot {
                         name: name.clone(),
                         spec: entry.spec.clone(),
+                        rt,
                         stamp: files,
                         model,
                         categories: entry.spec.categories(),
@@ -302,7 +305,6 @@ impl Engine {
         let engine = Engine {
             config,
             catalog,
-            threads,
             slots,
             status,
             image_available,

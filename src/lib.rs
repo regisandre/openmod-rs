@@ -15,6 +15,7 @@ pub mod image_input;
 pub mod keys;
 pub mod models;
 pub mod normalize;
+pub mod pool;
 pub mod profanity;
 pub mod qr;
 pub mod rules;

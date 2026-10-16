@@ -3,6 +3,17 @@
 > Status: maintained with every release.
 > Last checked: 2026-10-16
 
+## 0.4.0 - 2026-10-16
+
+- **Model sessions**: `model_sessions` (default 1, at most `max_concurrent`)
+  loads each ONNX model that many times, so that as many checks run it at
+  once; a model's own `sessions` overrides it. Each extra session is
+  another copy of the model in memory, and the admin interface's memory
+  estimate counts it. The CPU limit stays `max_concurrent` checks of
+  `threads_per_model` threads each.
+- A check that panics no longer leaves its model's lock poisoned: the
+  session goes back to its pool and the next check runs as usual.
+
 ## 0.3.1 - 2026-10-16
 
 - Logs leave out ONNX Runtime's warnings (its errors still show): PP-OCR

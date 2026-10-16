@@ -88,8 +88,9 @@ docker logs openmod   # the admin token
   lack it). The prebuilt ONNX Runtime needs it. On Linux,
   `grep -o -m1 avx2 /proc/cpuinfo` prints `avx2` when it is there.
 - **Memory and disk**: they depend on the tools you turn on, see
-  [Choose what to load](#choose-what-to-load). Everything on: 1.55 GB of
-  memory and 1.26 GB of model files.
+  [Choose what to load](#choose-what-to-load). Everything on: 1.74 GB of
+  memory once loaded and 1.32 GB of model files and lists; images only:
+  528 MB and 295 MB. Checks in flight add to it, see [Results](#results).
 - **OS**: measured on Windows; every commit builds, passes the tests and
   starts in Docker on Linux in CI. On Linux, the prebuilt ONNX Runtime
   needs glibc 2.38 or later (Ubuntu 24.04, Debian 13, Fedora 39 and later)
@@ -561,6 +562,7 @@ max_image_pixels = 50_000_000     # decoded width x height
 max_text_chars = 20_000
 max_concurrent = 2                # checks running inference at once
 threads_per_model = 2             # CPU threads per ONNX model
+model_sessions = 1                # checks running one model at once, see Model sessions
 # api_keys_file = "/etc/openmod/keys"   # one key per line
 allow_unauthenticated = false     # loopback only
 state_file = "openmod-state.toml" # admin token and API key digests
@@ -596,6 +598,32 @@ nudity = "mean"
 
 The models, workflows and labels reload from the admin interface. The
 `[server]` and `[admin]` settings take effect at restart.
+
+### Model sessions
+
+An ONNX Runtime session runs one call at a time, so by default two checks
+that need the same model take turns. `model_sessions` loads each ONNX model
+that many times, at most `max_concurrent`, so that as many checks run it at
+once; a model's own `sessions` overrides it:
+
+```toml
+[server]
+max_concurrent = 8
+model_sessions = 8
+
+[models.qwen3guard]
+kind = "text_guard"
+sessions = 2   # consulted on risky texts only: fewer copies of 515 MB
+```
+
+Each session past the first is another copy of the model: about 175 MB at
+rest for the image models and the OCR together, 450 MB once checks have run
+through it, 500 MB for GLiGuard and 515 MB for Qwen3Guard. The CPU limit
+does not move: at most `max_concurrent` checks run, each on
+`threads_per_model` threads. Raise it on a machine with idle cores only,
+and measure: see [Results](#results), where the laptop saturates first. A
+session also comes back when its check panics, so one bad image never
+stops a model.
 
 ## Command line
 
@@ -808,12 +836,14 @@ for the images, the own corpus for the texts:
 | texts, GLiGuard and Qwen3Guard | 2, 2 | 2.1 | 2.7 cores | 1.3 s | 1.6 GB |
 | texts, rules and lists | 16, 1 | 12,400 | 4.7 cores | 0.4 ms | 0.5 GB |
 
-Each model runs one check at a time, so a server tops out at about three
-images a second with the OCR on, whatever `max_concurrent` says, and more
-threads only spend more CPU per check. Past that, run more servers behind a
-load balancer, each with its own models in memory. Qwen3Guard only runs on
-texts GLiGuard finds risky, three in five in the own corpus: on everyday
-content it costs much less. A server under load holds more than the peaks
+About three images a second is what this laptop gives with the OCR on,
+however the work is split: more threads, `model_sessions = 8` (3.2 a second
+on 12 cores, 4.2 GB), or two servers side by side (3.2 together) all stop
+there, and the CPU per check grows with every core added. A machine with
+more cores, and cores that keep their speed under load, goes further.
+
+Qwen3Guard only runs on texts GLiGuard finds risky, three in five in the
+own corpus: on everyday content it costs much less. A server under load holds more than the peaks
 of [Choose what to load](#choose-what-to-load): the images being decoded,
 the ones waiting their turn, and the buffers ONNX Runtime keeps for them.
 

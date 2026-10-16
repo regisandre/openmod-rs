@@ -3,6 +3,7 @@
 use crate::config::{ConceptSpec, ImageInput};
 use crate::decision::Score;
 use crate::image_input::to_tensor;
+use crate::pool::Pool;
 use anyhow::{Result, anyhow, bail};
 use image::RgbImage;
 use ort::environment::Environment;
@@ -11,7 +12,7 @@ use ort::session::builder::GraphOptimizationLevel;
 use ort::value::Tensor;
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 use tokenizers::Tokenizer;
 
 static ENVIRONMENT: OnceLock<Environment> = OnceLock::new();
@@ -29,10 +30,22 @@ fn environment() -> Result<&'static Environment> {
 }
 
 /// How every model session runs.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Runtime {
     /// CPU threads per model.
     pub threads: usize,
+    /// Sessions loaded per model: how many checks run it at once.
+    pub sessions: usize,
+}
+
+/// `rt.sessions` sessions of one model, for as many checks at once. Each
+/// holds its own copy of the weights: sharing ONNX Runtime's prepacked
+/// weights between them was measured to save nothing.
+pub fn open_sessions(path: &Path, rt: Runtime) -> Result<Pool<Session>> {
+    let sessions = (0..rt.sessions.max(1))
+        .map(|_| open_session(path, rt))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(Pool::new(sessions))
 }
 
 pub fn open_session(path: &Path, rt: Runtime) -> Result<Session> {
@@ -77,7 +90,7 @@ fn softmax(v: &mut [f32]) {
 
 pub struct Classifier {
     name: String,
-    session: Mutex<Session>,
+    sessions: Pool<Session>,
     input: ImageInput,
     classes: Vec<String>,
     categories: BTreeMap<String, String>,
@@ -96,7 +109,7 @@ impl Classifier {
     ) -> Result<Self> {
         Ok(Classifier {
             name: name.to_string(),
-            session: Mutex::new(open_session(path, rt)?),
+            sessions: open_sessions(path, rt)?,
             input,
             classes,
             categories,
@@ -107,10 +120,7 @@ impl Classifier {
     pub fn run(&self, img: &RgbImage) -> Result<Vec<Score>> {
         let s = self.input.size as usize;
         let tensor = Tensor::from_array(([1usize, 3, s, s], to_tensor(img, &self.input)))?;
-        let mut session = self
-            .session
-            .lock()
-            .map_err(|_| anyhow::anyhow!("model lock poisoned"))?;
+        let mut session = self.sessions.get();
         let input_name = session.inputs()[0].name().to_string();
         let outputs = session.run(ort::inputs![input_name => tensor])?;
         let (_, data) = outputs[0].try_extract_tensor::<f32>()?;
@@ -170,7 +180,7 @@ pub fn concept_score(pos: f32, neg: Option<f32>, scale: f32, bias: f32, shift: f
 /// text tower is dropped after that, so it costs memory only while loading.
 pub struct ZeroShot {
     name: String,
-    session: Mutex<Session>,
+    sessions: Pool<Session>,
     input: ImageInput,
     scale: f32,
     bias: f32,
@@ -267,7 +277,7 @@ impl ZeroShot {
 
         Ok(ZeroShot {
             name: name.to_string(),
-            session: Mutex::new(open_session(vision, rt)?),
+            sessions: open_sessions(vision, rt)?,
             input,
             scale: logit_scale.exp(),
             bias: logit_bias,
@@ -280,10 +290,7 @@ impl ZeroShot {
         let s = self.input.size as usize;
         let tensor = Tensor::from_array(([1usize, 3, s, s], to_tensor(img, &self.input)))?;
         let mut image_embedding = {
-            let mut session = self
-                .session
-                .lock()
-                .map_err(|_| anyhow::anyhow!("model lock poisoned"))?;
+            let mut session = self.sessions.get();
             let outputs = session.run(ort::inputs!["pixel_values" => tensor])?;
             let (_, data) = outputs["pooler_output"].try_extract_tensor::<f32>()?;
             data.to_vec()

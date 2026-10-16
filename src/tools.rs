@@ -24,6 +24,10 @@ pub struct Tool {
     /// Memory it adds, in MB: how much the peak working set drops when this
     /// tool alone is turned off, every other tool on, `threads_per_model = 2`.
     pub ram_mb: u32,
+    /// Memory each session past the first adds, in MB (`model_sessions`):
+    /// another copy of the model, measured at rest. 0 for what is not an
+    /// ONNX model.
+    pub session_mb: u32,
     pub license: &'static str,
     pub files: &'static [File],
 }
@@ -133,6 +137,7 @@ pub const TOOLS: &[Tool] = &[
         kind: Kind::Image,
         summary: "Nudity, with a small vision transformer (5.6M parameters).",
         ram_mb: 27,
+        session_mb: 25,
         license: "Apache-2.0",
         files: &[File {
             name: "marqo-nsfw-384.onnx",
@@ -151,6 +156,7 @@ pub const TOOLS: &[Tool] = &[
         kind: Kind::Image,
         summary: "Nudity and gore. Its nudity score is averaged with Marqo's, which cancels the mistakes each makes alone.",
         ram_mb: 18,
+        session_mb: 18,
         license: "MIT",
         files: &[File {
             name: "owen-safety-xs.onnx",
@@ -169,6 +175,7 @@ pub const TOOLS: &[Tool] = &[
         kind: Kind::Image,
         summary: "Weapons, drugs, underwear, minors, self-harm, hate symbols, violence, gore and more: any concept you describe in words.",
         ram_mb: 227,
+        session_mb: 110,
         license: "Apache-2.0",
         files: &[
             File {
@@ -197,6 +204,7 @@ pub const TOOLS: &[Tool] = &[
         kind: Kind::Text,
         summary: "Unsafe text and 13 categories (hate, violence, sexual, self-harm...) in many languages.",
         ram_mb: 667,
+        session_mb: 500,
         license: "Apache-2.0",
         files: &[
             File {
@@ -219,6 +227,7 @@ pub const TOOLS: &[Tool] = &[
         kind: Kind::Text,
         summary: "A second opinion on risky texts that removes many confident mistakes. Slower.",
         ram_mb: 550,
+        session_mb: 515,
         license: "Apache-2.0",
         files: &[
             File {
@@ -245,6 +254,7 @@ pub const TOOLS: &[Tool] = &[
         kind: Kind::Image,
         summary: "Reads the text of an image (posters, flyers, screenshots) and checks it like a text: links to adult, gambling or unsafe sites, extremist slogans, phone numbers and more.",
         ram_mb: OCR_RAM_MB,
+        session_mb: 20,
         license: "Apache-2.0",
         files: &[
             File {
@@ -273,6 +283,7 @@ pub const TOOLS: &[Tool] = &[
         kind: Kind::Image,
         summary: "Reads the QR codes of an image and checks what they hold like a text: a code to an adult, gambling or unsafe site, a phone number, or any code at all.",
         ram_mb: QR_RAM_MB,
+        session_mb: 0,
         license: "MIT OR Apache-2.0",
         files: &[],
     },
@@ -282,6 +293,7 @@ pub const TOOLS: &[Tool] = &[
         kind: Kind::Text,
         summary: "Links to 90,000 adult sites, in texts, in the text of images and in QR codes. HaGeZi NSFW, refreshed daily.",
         ram_mb: ADULT_RAM_MB,
+        session_mb: 0,
         license: "GPL-3.0 + MPL-2.0",
         files: &[
             hagezi(
@@ -298,6 +310,7 @@ pub const TOOLS: &[Tool] = &[
         kind: Kind::Text,
         summary: "Links to 600,000 gambling sites, in texts, in the text of images and in QR codes. HaGeZi Gambling, refreshed daily.",
         ram_mb: GAMBLING_RAM_MB,
+        session_mb: 0,
         license: "GPL-3.0 + MPL-2.0",
         files: &[
             hagezi(
@@ -314,6 +327,7 @@ pub const TOOLS: &[Tool] = &[
         kind: Kind::Text,
         summary: "Links to 1.6 million malware, phishing and scam sites, in texts, in the text of images and in QR codes. HaGeZi Threat Intelligence Feeds, refreshed daily.",
         ram_mb: UNSAFE_RAM_MB,
+        session_mb: 0,
         license: "GPL-3.0 + MPL-2.0",
         files: &[
             hagezi(
@@ -377,9 +391,20 @@ pub fn model_ram_mb(id: &str, spec: &ModelSpec) -> u32 {
     (bytes / 1_000_000) as u32
 }
 
+/// The memory one more session of a model costs: measured for the built-in
+/// tools, its file sizes for a custom ONNX model, nothing for the rest.
+pub fn session_ram_mb(id: &str, spec: &ModelSpec) -> u32 {
+    match find(id) {
+        Some(tool) => tool.session_mb,
+        None if spec.uses_onnx() => model_ram_mb(id, spec),
+        None => 0,
+    }
+}
+
 /// The memory the enabled tools of `config` need, in MB. Measured peaks
 /// add up for the profiles in the README within a few percent; a single
-/// text model alone peaks higher while it loads.
+/// text model alone peaks higher while it loads. Each session past the
+/// first adds every loaded model's session cost.
 pub fn estimate_mb(config: &Config) -> u32 {
     let enabled: Vec<u32> = config
         .models
@@ -387,10 +412,16 @@ pub fn estimate_mb(config: &Config) -> u32 {
         .filter(|(_, e)| e.enabled)
         .map(|(id, e)| model_ram_mb(id, &e.spec))
         .collect();
+    let sessions: u32 = config
+        .models
+        .iter()
+        .filter(|(_, e)| e.enabled)
+        .map(|(id, e)| session_ram_mb(id, &e.spec) * (config.sessions(id) as u32 - 1))
+        .sum();
     let onnx = config
         .models
         .values()
         .any(|e| e.enabled && e.spec.uses_onnx());
     let runtime = if onnx { RUNTIME_RAM_MB } else { 0 };
-    BASE_RAM_MB + runtime + enabled.iter().sum::<u32>()
+    BASE_RAM_MB + runtime + enabled.iter().sum::<u32>() + sessions
 }

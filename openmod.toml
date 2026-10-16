@@ -9,6 +9,12 @@ max_image_pixels = 50_000_000
 max_text_chars = 20_000
 max_concurrent = 2
 threads_per_model = 2
+# How many checks may run the same model at once, at most `max_concurrent`;
+# a model's own `sessions` overrides it. Each session past the first holds
+# another copy of the model: about 450 MB under load for the image models
+# and the OCR together, 500 MB each for the text models. Raise it only on a
+# machine with idle cores.
+model_sessions = 1
 # API keys: OPENMOD_API_KEYS="key1,key2", one key per line in this file, or
 # the keys created in the admin interface (kept in `state_file`).
 # api_keys_file = "/etc/openmod/keys"
