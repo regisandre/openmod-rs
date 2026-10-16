@@ -3,6 +3,11 @@
 > Status: maintained with every release.
 > Last checked: 2026-10-16
 
+## 0.3.1 - 2026-10-16
+
+- Logs leave out ONNX Runtime's warnings (its errors still show): PP-OCR
+  made it print two dozen lines about unused initializers at every start.
+
 ## 0.3.0 - 2026-10-16
 
 What is written on an image now counts: the text of posters and

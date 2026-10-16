@@ -592,7 +592,7 @@ nudity = "mean"
 | `OPENMOD_API_KEYS` | API keys, comma separated, at least 24 characters each |
 | `OPENMOD_BIND`, `OPENMOD_ADMIN_BIND` | override `server.bind` and `admin.bind` |
 | `OPENMOD_MODELS_URL` | a mirror for the derived model files |
-| `RUST_LOG` | log filter, default `openmod=info,warn` |
+| `RUST_LOG` | log filter, default `openmod=info,ort=error,warn` |
 
 The models, workflows and labels reload from the admin interface. The
 `[server]` and `[admin]` settings take effect at restart.

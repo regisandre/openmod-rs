@@ -100,8 +100,10 @@ fn ready_engine(config: Config) -> Result<Engine> {
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
+            // ONNX Runtime warns about every unused initializer of a converted
+            // model, two dozen lines per start for PP-OCR: its errors only.
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "openmod=info,warn".into()),
+                .unwrap_or_else(|_| "openmod=info,ort=error,warn".into()),
         )
         .with_writer(std::io::stderr)
         // Colours on a terminal only: `docker logs` and journald show the codes raw.
