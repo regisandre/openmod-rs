@@ -4,7 +4,7 @@ use openmod::config::{Config, DEFAULT_CONFIG};
 use openmod::engine::Engine;
 use openmod::files::write_atomic;
 use openmod::keys::State;
-use std::io::Read;
+use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -112,6 +112,8 @@ fn main() -> Result<()> {
                 .unwrap_or_else(|_| "openmod=info,warn".into()),
         )
         .with_writer(std::io::stderr)
+        // Colours on a terminal only: `docker logs` and journald show the codes raw.
+        .with_ansi(std::io::stderr().is_terminal())
         .init();
 
     let cli = Cli::parse();

@@ -7,7 +7,7 @@ use anyhow::{Context, Result, bail};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
-use std::io::{Read, Write};
+use std::io::{IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -172,8 +172,10 @@ impl Progress {
 }
 
 /// `openmod fetch`: downloads what the enabled tools miss (every built-in
-/// tool with `all`), one file at a time, with a progress line on stderr.
+/// tool with `all`), one file at a time. On a terminal a progress line
+/// counts up; in a log (`docker exec`, CI) each file gets one line.
 pub fn fetch_command(config: &Config, all: bool) -> Result<()> {
+    let live = std::io::stderr().is_terminal();
     let every: BTreeSet<String> = config.models.keys().cloned().collect();
     let list = needed(config, all.then_some(&every));
     if list.is_empty() {
@@ -186,12 +188,16 @@ pub fn fetch_command(config: &Config, all: bool) -> Result<()> {
         let mut last = 0;
         fetch(&n.url, &n.dest, &n.sha256, n.size, |done| {
             let pct = done * 100 / n.size.max(1);
-            if pct != last {
+            if live && pct != last {
                 last = pct;
                 eprint!("\r{:<28} {pct:>3}%", n.name);
             }
         })?;
-        eprintln!("\r{:<28} ok  ", n.name);
+        if live {
+            eprintln!("\r{:<28} ok  ", n.name);
+        } else {
+            eprintln!("{:<28} ok, {} MB", n.name, n.size / 1_000_000);
+        }
     }
     Ok(())
 }

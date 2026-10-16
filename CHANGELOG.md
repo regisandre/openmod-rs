@@ -3,6 +3,13 @@
 > Status: maintained with every release.
 > Last checked: 2026-10-16
 
+## 0.2.1 - 2026-10-16
+
+- Logs without colour codes when stderr is not a terminal: `docker logs`
+  and journald no longer show raw escape sequences.
+- `openmod fetch` prints one line per file outside a terminal instead of a
+  hundred progress updates.
+
 ## 0.2.0 - 2026-10-16
 
 Tested against 1,911 real event posters and party photos: the image
