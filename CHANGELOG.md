@@ -1,7 +1,27 @@
 # Changelog
 
 > Status: maintained with every release.
-> Last checked: 2026-10-16
+> Last checked: 2026-10-18
+
+## Unreleased
+
+- **Fixed**: every refusal of the API comes in the error envelope. A body
+  over `max_upload_bytes` is `body_too_large` (413); a text that is not JSON
+  or has no `text` is `bad_request` (400, it was a plain-text 422); a text
+  sent without `Content-Type: application/json` is `unsupported_media`; a
+  SightEngine form that is not multipart is `bad_request`. They all came in
+  plain text before. `/v1/text` and `/v1/image` check the key first.
+- **Fixed**: an image wider or taller than 16,384 pixels was refused as
+  "larger than 0 pixels"; the message now states both limits.
+- README: what a first install needs before the first command, the steps
+  of the Quick start and of the systemd install from a release archive, a
+  Compose memory limit that fits the default tools, the HTTP answers that
+  come without the error envelope, and the calibration manifest format.
+- `rust-version` is 1.92, what `ort` 2.0.0-rc.14 needs (it said 1.85).
+- `tools/calibrate.py` reads a dump of `--images` and `--texts` together
+  instead of failing on its text rows.
+- A `.dockerignore`: `docker build` no longer sends `target/`, the models
+  and the corpus to the builder.
 
 ## 0.5.0 - 2026-10-16
 

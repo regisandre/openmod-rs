@@ -8,6 +8,8 @@ use crate::engine::{CheckError, Engine, Report};
 use crate::keys::{KeySet, LiveKeys, State};
 use anyhow::{Context, Result, bail};
 use axum::body::Bytes;
+use axum::extract::multipart::{MultipartError, MultipartRejection};
+use axum::extract::rejection::{BytesRejection, JsonRejection, QueryRejection};
 use axum::extract::{DefaultBodyLimit, Multipart, Query, State as Extract};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -42,6 +44,25 @@ pub struct App {
 pub type Shared = Arc<App>;
 
 impl App {
+    /// The state both listeners share, around a loaded engine and its keys.
+    pub fn new(engine: Engine, keys: LiveKeys, config_path: PathBuf) -> App {
+        let server = &engine.config.server;
+        let permits = Semaphore::new(server.max_concurrent.max(1));
+        let state_path = server.state_file.clone();
+        let allow_unauthenticated = server.allow_unauthenticated;
+        App {
+            engine: RwLock::new(Arc::new(engine)),
+            keys: Mutex::new(keys),
+            permits,
+            config_path,
+            state_path,
+            allow_unauthenticated,
+            edits: tokio::sync::Mutex::new(()),
+            sessions: Sessions::new(admin::SESSION_TTL),
+            downloads: Mutex::new(Downloads::default()),
+        }
+    }
+
     pub fn engine(&self) -> Arc<Engine> {
         self.engine
             .read()
@@ -74,6 +95,25 @@ impl App {
             .unwrap_or_else(|e| e.into_inner())
             .current()
             .len()
+    }
+
+    /// What an extractor refuses in plain text (a body over the limit, a text
+    /// that is not JSON, a form that is not multipart), in the envelope.
+    fn refused(&self, status: StatusCode, reason: String) -> ApiError {
+        match status {
+            StatusCode::PAYLOAD_TOO_LARGE => {
+                let limit = self.engine().config.server.max_upload_bytes;
+                ApiError::new(
+                    status,
+                    "body_too_large",
+                    format!("the request body is larger than {limit} bytes"),
+                )
+            }
+            StatusCode::UNSUPPORTED_MEDIA_TYPE => {
+                ApiError::new(status, "unsupported_media", reason)
+            }
+            _ => ApiError::bad_request(reason),
+        }
     }
 
     fn require_key(&self, presented: Option<&str>) -> Result<(), ApiError> {
@@ -158,7 +198,7 @@ impl From<CheckError> for ApiError {
                 "unsupported_media",
                 message,
             ),
-            CheckError::Decode(DecodeError::TooLarge(_)) => {
+            CheckError::Decode(DecodeError::TooLarge(_) | DecodeError::OverLimits(_)) => {
                 ApiError::new(StatusCode::PAYLOAD_TOO_LARGE, "image_too_large", message)
             }
             CheckError::Decode(DecodeError::Corrupt(_)) => {
@@ -238,22 +278,16 @@ struct Form {
     api_secret: Option<String>,
 }
 
-async fn read_form(mut multipart: Multipart) -> Result<Form, ApiError> {
-    let bad = |m: String| ApiError::bad_request(m);
+async fn read_form(app: &App, mut multipart: Multipart) -> Result<Form, ApiError> {
+    let bad = |e: MultipartError| app.refused(e.status(), e.body_text());
     let mut form = Form::default();
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| bad(e.to_string()))?
-    {
+    while let Some(field) = multipart.next_field().await.map_err(bad)? {
         let name = field.name().unwrap_or_default().to_string();
         match name.as_str() {
-            "media" => form.media = Some(field.bytes().await.map_err(|e| bad(e.to_string()))?),
-            "text" => form.text = Some(field.text().await.map_err(|e| bad(e.to_string()))?),
-            "workflow" => form.workflow = Some(field.text().await.map_err(|e| bad(e.to_string()))?),
-            "api_secret" => {
-                form.api_secret = Some(field.text().await.map_err(|e| bad(e.to_string()))?)
-            }
+            "media" => form.media = Some(field.bytes().await.map_err(bad)?),
+            "text" => form.text = Some(field.text().await.map_err(bad)?),
+            "workflow" => form.workflow = Some(field.text().await.map_err(bad)?),
+            "api_secret" => form.api_secret = Some(field.text().await.map_err(bad)?),
             _ => {}
         }
     }
@@ -287,10 +321,12 @@ async fn health(Extract(app): Extract<Shared>) -> impl IntoResponse {
 async fn check_image(
     Extract(app): Extract<Shared>,
     headers: HeaderMap,
-    Query(q): Query<WorkflowQuery>,
-    body: Bytes,
+    query: Result<Query<WorkflowQuery>, QueryRejection>,
+    body: Result<Bytes, BytesRejection>,
 ) -> Result<Json<Report>, ApiError> {
     app.require_key(header_key(&headers).as_deref())?;
+    let Query(q) = query.map_err(|r| app.refused(r.status(), r.body_text()))?;
+    let body = body.map_err(|r| app.refused(r.status(), r.body_text()))?;
     if body.is_empty() {
         return Err(ApiError::bad_request("empty body: send the image bytes"));
     }
@@ -310,9 +346,10 @@ pub struct TextBody {
 async fn check_text(
     Extract(app): Extract<Shared>,
     headers: HeaderMap,
-    Json(body): Json<TextBody>,
+    body: Result<Json<TextBody>, JsonRejection>,
 ) -> Result<Json<Report>, ApiError> {
     app.require_key(header_key(&headers).as_deref())?;
+    let Json(body) = body.map_err(|r| app.refused(r.status(), r.body_text()))?;
     let workflow = body.workflow.unwrap_or_else(|| "default".into());
     Ok(Json(
         run_check(&app, move |e| e.check_text(&body.text, &workflow)).await?,
@@ -324,9 +361,11 @@ async fn check_text(
 async fn compat_image(
     Extract(app): Extract<Shared>,
     headers: HeaderMap,
-    multipart: Multipart,
+    multipart: Result<Multipart, MultipartRejection>,
 ) -> Result<Json<Report>, ApiError> {
-    let form = read_form(multipart).await?;
+    // The key travels in the form: a form that does not parse is refused first.
+    let multipart = multipart.map_err(|r| app.refused(r.status(), r.body_text()))?;
+    let form = read_form(&app, multipart).await?;
     let key = form.api_secret.clone().or_else(|| header_key(&headers));
     app.require_key(key.as_deref())?;
     let media = form
@@ -342,9 +381,10 @@ async fn compat_image(
 async fn compat_text(
     Extract(app): Extract<Shared>,
     headers: HeaderMap,
-    multipart: Multipart,
+    multipart: Result<Multipart, MultipartRejection>,
 ) -> Result<Json<Report>, ApiError> {
-    let form = read_form(multipart).await?;
+    let multipart = multipart.map_err(|r| app.refused(r.status(), r.body_text()))?;
+    let form = read_form(&app, multipart).await?;
     let key = form.api_secret.clone().or_else(|| header_key(&headers));
     app.require_key(key.as_deref())?;
     let text = form
@@ -407,6 +447,20 @@ fn banner(token: &str, admin: &SocketAddr) {
     eprintln!();
 }
 
+/// The API listener: health, both checks and the SightEngine-compatible
+/// endpoints, with request bodies capped at `max_upload_bytes`.
+pub fn api_router(app: Shared) -> Router {
+    let limit = app.engine().config.server.max_upload_bytes;
+    Router::new()
+        .route("/health", get(health))
+        .route("/v1/image", post(check_image))
+        .route("/v1/text", post(check_text))
+        .route("/1.0/check-workflow.json", post(compat_image))
+        .route("/1.0/text/check-workflow.json", post(compat_text))
+        .layer(DefaultBodyLimit::max(limit))
+        .with_state(app)
+}
+
 pub async fn serve(config_path: PathBuf, engine: Engine) -> Result<()> {
     let config = engine.config.clone();
     let api_addr: SocketAddr = config
@@ -457,17 +511,7 @@ pub async fn serve(config_path: PathBuf, engine: Engine) -> Result<()> {
     }
 
     let limit = config.server.max_upload_bytes;
-    let app: Shared = Arc::new(App {
-        engine: RwLock::new(Arc::new(engine)),
-        keys: Mutex::new(keys),
-        permits: Semaphore::new(config.server.max_concurrent.max(1)),
-        config_path,
-        state_path,
-        allow_unauthenticated: config.server.allow_unauthenticated,
-        edits: tokio::sync::Mutex::new(()),
-        sessions: Sessions::new(admin::SESSION_TTL),
-        downloads: Mutex::new(Downloads::default()),
-    });
+    let app: Shared = Arc::new(App::new(engine, keys, config_path));
 
     let hours = config.server.lists_refresh_hours;
     if hours > 0 {
@@ -485,14 +529,7 @@ pub async fn serve(config_path: PathBuf, engine: Engine) -> Result<()> {
         });
     }
 
-    let api = Router::new()
-        .route("/health", get(health))
-        .route("/v1/image", post(check_image))
-        .route("/v1/text", post(check_text))
-        .route("/1.0/check-workflow.json", post(compat_image))
-        .route("/1.0/text/check-workflow.json", post(compat_text))
-        .layer(DefaultBodyLimit::max(limit))
-        .with_state(app.clone());
+    let api = api_router(app.clone());
     let listener = tokio::net::TcpListener::bind(api_addr)
         .await
         .with_context(|| format!("binding {api_addr}"))?;

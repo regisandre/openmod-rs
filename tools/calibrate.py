@@ -17,6 +17,7 @@ target = {  # score key -> corpus categories that should trigger it
     "underwear": ["underwear"], "swimwear": ["swimwear"], "minor": ["minors"],
 }
 rows = [json.loads(l) for l in open(dump, encoding="utf-8") if l.strip()]
+rows = [r for r in rows if r.get("kind", "image") == "image"]  # a dump of --images and --texts holds both
 safe = [r for r in rows if r["category"].startswith("safe_")]
 print(f"{len(rows)} rows, {len(safe)} safe, FP budget {budget:.0%}")
 print(f"{'key':<18}{'n':>4}{'thr':>11}{'recall':>8}{'safe_fp':>8}  safe max / target median  add_shift")

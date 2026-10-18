@@ -1,0 +1,6 @@
+# The image needs only Cargo.toml, Cargo.lock, openmod.toml, .cargo, src and ui:
+# keep the build output, the downloaded models and the corpus out of the context.
+.git
+target
+models
+testdata

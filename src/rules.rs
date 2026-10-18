@@ -101,7 +101,7 @@ fn luhn_valid(d: &[u32]) -> bool {
             }
         })
         .sum();
-    sum % 10 == 0
+    sum.is_multiple_of(10)
 }
 
 fn iban_valid(raw: &str) -> bool {

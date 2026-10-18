@@ -1,12 +1,13 @@
 # openmod
 
 > Status: alpha. Works end to end; image thresholds calibrated on 450 corpus images and 1,911 real party photos and event posters, text thresholds on 486 texts in 7 languages; text in images checked against RapidOCR and on the same 1,911 images.
-> Last checked: 2026-10-16
+> Last checked: 2026-10-18
 
 Self-hosted image and text moderation in one Rust binary. CPU only, no GPU,
 no Python at runtime, and nothing you check ever leaves your server.
-Configurable workflows in the spirit of SightEngine, SightEngine-compatible
-endpoints, and a small admin interface to choose what runs.
+Configurable workflows in the spirit of SightEngine (a hosted moderation
+API), SightEngine-compatible endpoints, and a small admin interface to
+choose what runs.
 
 - **Images**: nudity, underwear, swimwear, suggestive, minors, gore,
   violence, self-harm, weapons, knives, drugs, cannabis, alcohol, smoking,
@@ -26,7 +27,7 @@ endpoints, and a small admin interface to choose what runs.
   id, a title, a sentence you can show your users, the score and the
   threshold it crossed.
 - **Pay only for what you load**: turn each tool on or off; a tool that is
-  off uses no memory. From 11 MB (text rules only) to 1.74 GB (everything).
+  off uses no memory. From 19 MB (text rules only) to 1.74 GB (everything).
 
 **Contents**: [Quick start](#quick-start) |
 [Install](#install) |
@@ -44,33 +45,61 @@ endpoints, and a small admin interface to choose what runs.
 [Limitations](#limitations) |
 [Development](#development)
 
+**Words used here**: a *tool* is one model, reader or domain list that you
+turn on or off; a *workflow* is a named set of categories, each with its
+thresholds, that a request picks; the *state file* keeps the admin token and
+the digests of the API keys.
+
 ## Quick start
 
-```sh
-git clone https://github.com/regisandre/openmod-rs && cd openmod-rs
-cargo build --release
-./target/release/openmod serve
-```
+You need git, Rust 1.92 or later ([rustup](https://rustup.rs)), a C++
+toolchain for the linker (`build-essential` on Debian and Ubuntu, the
+Visual Studio Build Tools on Windows), an x86-64 CPU with AVX2 (see
+[Requirements](#requirements)) and internet access: the build downloads
+ONNX Runtime. The release build takes a few minutes.
 
-On first start, openmod writes a default `openmod.toml`, then prints where
-its admin interface listens and a one-time admin token:
+1. Build and start the server:
 
-```
-  openmod admin interface: http://127.0.0.1:8089
-  admin token (shown once): oma_...
-```
+   ```sh
+   git clone https://github.com/regisandre/openmod-rs && cd openmod-rs
+   cargo build --release
+   ./target/release/openmod serve    # target\release\openmod.exe on Windows
+   ```
 
-Open that address and sign in with the token. The setup takes four steps:
-choose the tools, download their models (each file is checked against a
-pinned SHA-256), create an API key, done. Then:
+   It reads `openmod.toml` in the current directory (the repository ships
+   one; where there is none, `serve` writes the default), then prints where
+   its admin interface listens and a one-time admin token:
 
-```sh
-curl -H "Authorization: Bearer $OPENMOD_KEY" --data-binary @photo.jpg \
-  "http://127.0.0.1:8088/v1/image?workflow=default"
-```
+   ```
+     openmod admin interface: http://127.0.0.1:8089
+     admin token (shown once): oma_...
+   ```
 
-No browser at hand? `openmod fetch` downloads the models of the enabled
-tools, and `openmod key add my-app` prints a new API key.
+   Until their files are downloaded, the tools are not ready: the log warns
+   about each one, `/health` answers `degraded`, and an image checked with
+   the `default` workflow gets `503 workflow_unavailable`.
+
+2. Open that address and sign in with the token. The setup takes four
+   steps: choose the tools, download their files (each model file is
+   checked against a pinned SHA-256), create an API key, done. The shipped
+   configuration turns every tool on: 1.32 GB to download and 1.74 GB of
+   memory. For images only, turn GLiGuard and Qwen3Guard off in the first
+   step: 295 MB and 528 MB.
+
+3. Check an image with the key the setup showed:
+
+   ```sh
+   export OPENMOD_KEY=om_...    # the key from step 2
+   curl -H "Authorization: Bearer $OPENMOD_KEY" --data-binary @photo.jpg \
+     "http://127.0.0.1:8088/v1/image?workflow=default"
+   ```
+
+   The answer is described under [Response](#response).
+
+No browser at hand? Before `serve`, run `openmod fetch` (the files of the
+enabled tools) and `openmod key add my-app` (prints a new API key). A
+running server takes a new key at once, and downloaded files at its next
+start or the next change saved in the admin interface.
 
 Or run the published image:
 
@@ -100,13 +129,15 @@ docker logs openmod   # the admin token
 
 ### From source
 
-With Rust 1.85 or later:
+With Rust 1.92 or later (what `ort`, the ONNX Runtime binding, needs) and
+a C++ toolchain:
 
 ```sh
 cargo build --release
 ```
 
-The binary is `target/release/openmod` (about 33 MB). ONNX Runtime is
+The binary is `target/release/openmod` (`openmod.exe` on Windows, about
+33 MB). ONNX Runtime is
 downloaded and linked statically at build time, so the binary only needs
 the C++ standard library at runtime.
 
@@ -123,7 +154,8 @@ docker exec openmod openmod fetch           # or download the models from the ad
 docker exec openmod openmod key add my-app  # an API key, printed once
 ```
 
-To build it yourself: `docker build -t openmod .`
+To build it yourself: `docker build -t openmod .`, then use `openmod` in
+place of `ghcr.io/regisandre/openmod-rs:latest` above.
 
 Everything openmod writes lives in `/data`: the configuration, the models
 and the state file. The admin port is published on the host's loopback
@@ -138,34 +170,58 @@ services:
     restart: unless-stopped
     ports: ["8088:8088", "127.0.0.1:8089:8089"]
     volumes: ["openmod-data:/data"]
-    mem_limit: 1g   # images only; 2g with the text models
+    mem_limit: 3g   # every tool on (the default); 1.5g with the text models off
 volumes:
   openmod-data:
 ```
 
 ### systemd
 
-```ini
-[Unit]
-Description=openmod moderation server
-After=network-online.target
+1. Download a release archive (binary, `openmod.toml`, README, licenses)
+   from [Releases](https://github.com/regisandre/openmod-rs/releases), check
+   it, and install the binary, a system user and the configuration:
 
-[Service]
-User=openmod
-WorkingDirectory=/var/lib/openmod
-ExecStart=/usr/local/bin/openmod --config /var/lib/openmod/openmod.toml serve
-Restart=on-failure
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-ReadWritePaths=/var/lib/openmod
+   ```sh
+   v=v0.5.0   # the latest release
+   base=https://github.com/regisandre/openmod-rs/releases/download/$v
+   curl -fLO "$base/openmod-$v-x86_64-linux.tar.gz"
+   curl -fLO "$base/openmod-$v-x86_64-linux.tar.gz.sha256"
+   sha256sum -c "openmod-$v-x86_64-linux.tar.gz.sha256"
+   tar xzf "openmod-$v-x86_64-linux.tar.gz"
+   sudo install -m 755 "openmod-$v-x86_64-linux/openmod" /usr/local/bin/openmod
+   sudo useradd --system --create-home --home-dir /var/lib/openmod --shell /usr/sbin/nologin openmod
+   sudo install -o openmod -g openmod -m 600 "openmod-$v-x86_64-linux/openmod.toml" /var/lib/openmod/
+   ```
 
-[Install]
-WantedBy=multi-user.target
-```
+2. Save this unit as `/etc/systemd/system/openmod.service`:
 
-`journalctl -u openmod` shows the admin token at first start.
+   ```ini
+   [Unit]
+   Description=openmod moderation server
+   After=network-online.target
+
+   [Service]
+   User=openmod
+   WorkingDirectory=/var/lib/openmod
+   ExecStart=/usr/local/bin/openmod --config /var/lib/openmod/openmod.toml serve
+   Restart=on-failure
+   NoNewPrivileges=yes
+   ProtectSystem=strict
+   ProtectHome=yes
+   PrivateTmp=yes
+   ReadWritePaths=/var/lib/openmod
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+3. Start it, then read the admin token it prints at first start:
+
+   ```sh
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now openmod
+   journalctl -u openmod
+   ```
 
 ### Reaching the admin interface
 
@@ -180,12 +236,14 @@ ssh -L 8089:127.0.0.1:8089 you@your-server
 then browse to `http://127.0.0.1:8089`.
 
 Or put it behind an HTTPS reverse proxy with its own access control. The
-proxy must pass the original host and scheme. With Nginx:
+proxy must pass the original host, port included (the interface refuses a
+change coming from a page whose origin names another host), and the scheme
+(the session cookie is `Secure` behind HTTPS). With Nginx:
 
 ```nginx
 location / {
     proxy_pass http://127.0.0.1:8089;
-    proxy_set_header Host $host;
+    proxy_set_header Host $http_host;
     proxy_set_header X-Forwarded-Proto $scheme;
 }
 ```
@@ -255,7 +313,9 @@ model's load spike counts in full when no larger one hides it.
 | Text rules and lists | lists | 45 MB | 39 MB |
 | Text rules only | none | 11 MB | none |
 
-Turn a tool off in the admin interface, or in `openmod.toml`:
+Turn a tool off in the admin interface, or add `enabled = false` to its
+block in `openmod.toml` (the block is already in the file; keep its other
+lines):
 
 ```toml
 [models.qwen3guard]
@@ -283,16 +343,18 @@ Authenticate with `Authorization: Bearer <key>` or `X-Api-Key: <key>`.
 
 ```sh
 # Image: the raw bytes as the body
-curl -H "Authorization: Bearer $KEY" --data-binary @photo.jpg \
+curl -H "Authorization: Bearer $OPENMOD_KEY" --data-binary @photo.jpg \
   "http://127.0.0.1:8088/v1/image?workflow=default"
 
 # Text: JSON
-curl -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+curl -H "Authorization: Bearer $OPENMOD_KEY" -H "Content-Type: application/json" \
   -d '{"text": "...", "workflow": "default"}' http://127.0.0.1:8088/v1/text
 ```
 
-`GET /health` answers `{"status": "ok"}`, or `"degraded"` with the enabled
-tools that are not ready.
+`GET /health` needs no key and answers
+`{"status": "ok", "version": "0.5.0", "problems": []}`, or `"degraded"`
+with one line per enabled tool that is not ready
+(`"problems": ["siglip is not ready"]`).
 
 ### Migrating from SightEngine
 
@@ -325,7 +387,7 @@ English `text`.
         "message": "This content contains nudity or sexual content.",
         "score": 0.97,
         "threshold": 0.8,
-        "source": "marqo_nsfw"
+        "source": "marqo_nsfw+owen_safety"
       }
     ],
     "review_reason": []
@@ -337,6 +399,9 @@ English `text`.
 
 - `action` is `accept`, `review` or `reject`.
 - `id` is stable: use it to pick your own translated message.
+- `source` names the model that gave the score, or the models whose scores
+  were combined (`marqo_nsfw+owen_safety`, see
+  [Combining models](#combining-models)).
 - `text` and `message` are English defaults. Override them per category in
   `[labels.<id>]`.
 - `unchecked` appears only when some rules of the workflow could not be
@@ -344,7 +409,7 @@ English `text`.
 
 ### Errors
 
-Errors share one envelope:
+openmod's errors share one envelope:
 
 ```json
 { "status": "failure", "error": { "type": "unsupported_media", "code": 415, "message": "..." } }
@@ -352,18 +417,27 @@ Errors share one envelope:
 
 | `type` | HTTP | When |
 |---|---|---|
-| `unauthorized` | 401 | missing or wrong API key, or no key created yet |
-| `bad_request` | 400 | empty body, missing field |
+| `unauthorized` | 401 | missing or wrong API key, or no key created yet; checked first, except on the SightEngine endpoints, whose key travels in the form |
+| `bad_request` | 400 | empty body, a text that is not JSON or has no `text`, a SightEngine form that is not multipart or lacks a field |
 | `unknown_workflow` | 400 | no such workflow |
-| `unsupported_media` | 415 | not JPEG, PNG, WebP or GIF |
+| `unsupported_media` | 415 | not JPEG, PNG, WebP or GIF, or a text sent without `Content-Type: application/json` |
 | `corrupt_media` | 400 | the file does not decode |
-| `image_too_large` | 413 | more pixels than `max_image_pixels` |
+| `body_too_large` | 413 | a request body over `max_upload_bytes` |
+| `image_too_large` | 413 | more pixels than `max_image_pixels`, or a side over 16,384 pixels |
 | `text_too_long` | 413 | more characters than `max_text_chars` |
 | `workflow_unavailable` | 503 | the workflow has no rule for this kind of content, or none it can check on this server |
 | `busy` | 503 | queue full for 30 s, retry later |
+| `internal` | 500 | a bug: the server log says what happened |
 
-`sh scripts/smoke-test.sh safe.jpg unsafe.jpg` checks a running server
-against all of the above.
+`scripts/smoke-test.sh` checks a running server end to end: health, keys,
+both APIs, the SightEngine endpoints, the error envelope (401, 400, 415) and
+the admin interface's access control. It is in the repository only, not in
+the image or the release archive, and takes an image of yours that should
+pass and one that should not:
+
+```sh
+OPENMOD_KEY=om_... sh scripts/smoke-test.sh safe.jpg unsafe.jpg [api_url] [admin_url]
+```
 
 ## Workflows
 
@@ -594,6 +668,7 @@ nudity = "mean"
 | `OPENMOD_API_KEYS` | API keys, comma separated, at least 24 characters each |
 | `OPENMOD_BIND`, `OPENMOD_ADMIN_BIND` | override `server.bind` and `admin.bind` |
 | `OPENMOD_MODELS_URL` | a mirror for the derived model files |
+| `OPENMOD_UI_DIR` | serve the admin interface from this directory instead of the copy built in, to edit it |
 | `RUST_LOG` | log filter, default `openmod=info,ort=error,warn` |
 
 The models, workflows and labels reload from the admin interface. The
@@ -604,7 +679,7 @@ The models, workflows and labels reload from the admin interface. The
 | Command | What it does |
 |---|---|
 | `openmod serve` | the API and the admin interface; writes a default configuration first if there is none |
-| `openmod fetch [--all]` | downloads the model files and domain lists of the enabled tools (`--all`: every configured tool) |
+| `openmod fetch [--all]` | downloads the model files and domain lists of the enabled tools (`--all`: every configured tool); a running server loads them at its next start or the next change saved in the admin interface |
 | `openmod admin-token` | prints a new admin token; the old one and its sessions stop working |
 | `openmod key add <name>` | creates an API key and prints it once; a running server accepts it at its next request |
 | `openmod key list` | lists the keys: id, first characters, creation date, name |
@@ -612,7 +687,7 @@ The models, workflows and labels reload from the admin interface. The
 | `openmod image <file> [-w workflow]` | checks one image and prints the JSON answer |
 | `openmod text <text or -> [-w workflow]` | checks a text (`-` reads stdin) |
 | `openmod validate` | checks the configuration without loading any model, and lists the rules a disabled tool leaves unchecked |
-| `openmod eval --images <manifest> --texts <jsonl> [-w workflow]` | scores a labelled corpus, see [Calibration](#calibration) |
+| `openmod eval [--images <manifest>] [--texts <jsonl>] [-w workflow] [--dump <file>]` | scores a labelled corpus (images, texts or both) and writes every score to `--dump` (default `eval-scores.jsonl`), see [Calibration](#calibration) |
 
 Every command takes `-c <file>` (or `OPENMOD_CONFIG`).
 
@@ -880,6 +955,12 @@ python tools/category_rates.py scores.jsonl        # texts: hit rates per catego
   running the models again.
 - `testdata/README.md` describes the corpus format; the images and the
   third-party text samples are rebuilt by the scripts in `tools/corpus/`.
+- An image manifest holds one JSON object per line, with a path relative
+  to the manifest's directory, a category and the expected action
+  (`safe`, `review` or `reject`):
+  `{"path": "photos/0001.jpg", "category": "safe_mine", "expected": "safe"}`.
+  `calibrate.py` counts the categories starting with `safe_` as the content
+  that should pass.
 - Your own content is the best calibration set. Put a few hundred of your
   users' ordinary images in a manifest with `"expected": "safe"`, run
   `eval` with a workflow that lists every category at `review = 0.5`, and

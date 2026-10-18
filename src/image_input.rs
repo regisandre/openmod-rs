@@ -5,12 +5,22 @@ use image::imageops::FilterType;
 use image::{DynamicImage, ImageDecoder, ImageReader, Limits, RgbImage};
 use std::io::Cursor;
 
+/// The longest side the decoder takes, whatever `max_image_pixels` allows.
+pub const MAX_SIDE: u32 = 16_384;
+
 #[derive(Debug, thiserror::Error)]
 pub enum DecodeError {
     #[error("the file is not a supported image (JPEG, PNG, WebP or GIF)")]
     Unsupported,
     #[error("the image is larger than {0} pixels")]
     TooLarge(u64),
+    /// The decoder's own limits tripped: a side over `MAX_SIDE`, or more
+    /// memory than `max_image_pixels` needs.
+    #[error(
+        "the image is too large to decode: at most {side} pixels a side and {0} pixels in all",
+        side = MAX_SIDE
+    )]
+    OverLimits(u64),
     #[error("the image could not be decoded: {0}")]
     Corrupt(String),
 }
@@ -25,9 +35,8 @@ pub fn decode(bytes: &[u8], max_pixels: u64) -> Result<RgbImage, DecodeError> {
         return Err(DecodeError::Unsupported);
     }
     let mut limits = Limits::default();
-    let side = 16_384;
-    limits.max_image_width = Some(side);
-    limits.max_image_height = Some(side);
+    limits.max_image_width = Some(MAX_SIDE);
+    limits.max_image_height = Some(MAX_SIDE);
     // RGBA8 worst case plus headroom for the decoder.
     limits.max_alloc = Some(
         max_pixels
@@ -36,23 +45,24 @@ pub fn decode(bytes: &[u8], max_pixels: u64) -> Result<RgbImage, DecodeError> {
     );
     reader.limits(limits);
 
-    let mut decoder = reader.into_decoder().map_err(map_err)?;
+    let refused = |e| map_err(e, max_pixels);
+    let mut decoder = reader.into_decoder().map_err(refused)?;
     let (w, h) = decoder.dimensions();
     if (w as u64) * (h as u64) > max_pixels {
         return Err(DecodeError::TooLarge(max_pixels));
     }
     let orientation = decoder.orientation().ok();
-    let mut img = DynamicImage::from_decoder(decoder).map_err(map_err)?;
+    let mut img = DynamicImage::from_decoder(decoder).map_err(refused)?;
     if let Some(o) = orientation {
         img.apply_orientation(o);
     }
     Ok(img.to_rgb8())
 }
 
-fn map_err(e: image::ImageError) -> DecodeError {
+fn map_err(e: image::ImageError, max_pixels: u64) -> DecodeError {
     match e {
         image::ImageError::Unsupported(_) => DecodeError::Unsupported,
-        image::ImageError::Limits(_) => DecodeError::TooLarge(0),
+        image::ImageError::Limits(_) => DecodeError::OverLimits(max_pixels),
         other => DecodeError::Corrupt(other.to_string()),
     }
 }
