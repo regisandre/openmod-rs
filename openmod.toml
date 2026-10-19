@@ -66,6 +66,10 @@ filter = "bicubic"
 pixel_range = "unit"
 logit_scale = 4.7649970054626465
 logit_bias = -12.9324369430542
+# The text half of SigLIP is freed once the prompts below are encoded. A
+# program using openmod as a library, which adds categories at run time,
+# keeps it (about 111 MB more in memory):
+# keep_text_encoder = true
 
 # `negatives` describe what is often mistaken for a category: an image closer
 # to a negative than to every prompt scores low. `shift` moves the decision

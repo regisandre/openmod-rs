@@ -1,10 +1,13 @@
 //! The `openmod.toml` file: server limits, models and workflows.
 
-use crate::workflow::Workflow;
+use crate::catalog::Catalog;
+use crate::workflow::Problem;
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+
+pub use crate::workflow::WorkflowSpec;
 
 /// The configuration `openmod serve` writes on first run, and the source of
 /// the model blocks the admin interface adds back when a tool is enabled.
@@ -195,6 +198,12 @@ pub enum ModelSpec {
         logit_scale: f32,
         logit_bias: f32,
         concepts: BTreeMap<String, ConceptSpec>,
+        /// Keep the text half of the model loaded (about 111 MB for SigLIP
+        /// base) instead of freeing it once the prompts above are encoded.
+        /// A program using openmod as a library then adds categories at run
+        /// time with `Engine::compile_workflow`.
+        #[serde(default)]
+        keep_text_encoder: bool,
     },
     /// Qwen3Guard-Gen exported to ONNX by `tools/export_qwen3guard.py`.
     TextGuard {
@@ -307,6 +316,7 @@ const MODEL_KEYS: &[(&str, &[&str])] = &[
             "logit_scale",
             "logit_bias",
             "concepts",
+            "keep_text_encoder",
         ],
     ),
     ("text_guard", &["path", "tokenizer", "second_opinion"]),
@@ -398,6 +408,17 @@ impl ConceptSpec {
             ConceptSpec::Prompts(_) => &[],
             ConceptSpec::Calibrated(c) => &c.negatives,
         }
+    }
+
+    /// What is wrong with the concept called `name`. This one function checks
+    /// the concepts of `openmod.toml` and those compiled at run time.
+    pub fn problems(&self, name: &str) -> Vec<Problem> {
+        if self.prompts().is_empty() {
+            return vec![Problem::new(format!(
+                "concept `{name}` has no prompt (negatives alone score nothing)"
+            ))];
+        }
+        Vec::new()
     }
 }
 
@@ -527,15 +548,6 @@ impl ModelSpec {
             ModelSpec::ImageOcr { .. } => BTreeSet::new(),
         }
     }
-}
-
-#[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct WorkflowSpec {
-    #[serde(default)]
-    pub image: Workflow,
-    #[serde(default)]
-    pub text: Workflow,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -754,6 +766,42 @@ impl Config {
             .collect()
     }
 
+    /// Everything wrong with a workflow that does not come from this
+    /// configuration file, with the custom categories (`concepts`) it brings:
+    /// what `validate` refuses in a file, with the same words, and what only
+    /// makes sense for a workflow built to be checked against. A concept
+    /// cannot take the name of a category that already exists, built in or
+    /// scored by a configured tool, for images or for texts; and the
+    /// workflow needs at least one rule. A file may hold a workflow without
+    /// rules (it answers `workflow_unavailable`), so `validate` leaves that
+    /// one out.
+    pub fn workflow_problems(
+        &self,
+        spec: &WorkflowSpec,
+        concepts: &BTreeMap<String, ConceptSpec>,
+    ) -> Vec<Problem> {
+        let mut image = self.known_categories(true);
+        let text = self.known_categories(false);
+        let builtin = Catalog::builtin();
+        let mut problems = Vec::new();
+        for (name, concept) in concepts {
+            problems.extend(concept.problems(name));
+            if image.contains(name) || text.contains(name) || builtin.knows(name) {
+                problems.push(Problem::new(format!(
+                    "concept `{name}` has the name of a category that already exists (built in, or scored by a configured tool): choose another name"
+                )));
+            }
+        }
+        image.extend(concepts.keys().cloned());
+        problems.extend(spec.problems(&image, &text));
+        if spec.is_empty() {
+            problems.push(Problem::new(
+                "the workflow has no rule: give at least one image or text rule",
+            ));
+        }
+        problems
+    }
+
     /// Refuses a workflow that names a category no model can score, or a
     /// threshold outside `[0, 1]`, so a typo never silently disables a rule.
     /// A category whose models are all disabled stays valid: its rules are
@@ -762,25 +810,8 @@ impl Config {
         let image = self.known_categories(true);
         let text = self.known_categories(false);
         for (name, wf) in &self.workflows {
-            for (kind, rules, known) in [("image", &wf.image, &image), ("text", &wf.text, &text)] {
-                for (category, t) in &rules.rules {
-                    if !known.contains(category) {
-                        bail!(
-                            "workflow `{name}`: {kind} category `{category}` is not produced by any model (known: {})",
-                            known.iter().cloned().collect::<Vec<_>>().join(", ")
-                        );
-                    }
-                    for v in [t.reject, t.review].into_iter().flatten() {
-                        if !(0.0..=1.0).contains(&v) {
-                            bail!(
-                                "workflow `{name}`: threshold {v} for `{category}` is outside [0, 1]"
-                            );
-                        }
-                    }
-                    if t.reject.is_none() && t.review.is_none() {
-                        bail!("workflow `{name}`: `{category}` has neither `reject` nor `review`");
-                    }
-                }
+            if let Some(problem) = wf.problems(&image, &text).first() {
+                bail!("workflow `{name}`: {problem}");
             }
         }
         if !self.workflows.contains_key("default") {
@@ -809,10 +840,8 @@ impl Config {
             }
             if let ModelSpec::ImageZeroShot { concepts, .. } = spec {
                 for (concept, c) in concepts {
-                    if c.prompts().is_empty() {
-                        bail!(
-                            "model `{name}`: concept `{concept}` has no prompt (negatives alone score nothing)"
-                        );
+                    if let Some(problem) = c.problems(concept).first() {
+                        bail!("model `{name}`: {problem}");
                     }
                 }
             }

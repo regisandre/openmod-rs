@@ -3,6 +3,7 @@
 use crate::config::{ConceptSpec, ImageInput};
 use crate::decision::Score;
 use crate::image_input::to_tensor;
+use crate::workflow::CompiledConcept;
 use anyhow::{Result, anyhow, bail};
 use image::RgbImage;
 use ort::environment::Environment;
@@ -146,12 +147,13 @@ impl Classifier {
     }
 }
 
+/// A zero-shot category of the configuration, with the embeddings of its
+/// prompts and of its negatives: what it is often confused with.
 struct Concept {
     category: String,
     shift: f32,
-    /// A negative prompt: what the category is often confused with.
-    negative: bool,
-    embedding: Vec<f32>,
+    prompts: Vec<Vec<f32>>,
+    negatives: Vec<Vec<f32>>,
 }
 
 /// The score of a zero-shot category, from the cosine similarity of the image
@@ -170,11 +172,61 @@ pub fn concept_score(pos: f32, neg: Option<f32>, scale: f32, bias: f32, shift: f
     }
 }
 
+/// An embedding that does not have the size of the image's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("an embedding holds {found} values, the image's holds {expected}")]
+pub struct DimensionMismatch {
+    pub expected: usize,
+    pub found: usize,
+}
+
+/// The score of a zero-shot category from the embeddings of an image and of
+/// the prompts and negatives of the category, see [`concept_score`] for the
+/// formula: the best prompt and the best negative are the ones most similar
+/// to the image. All embeddings are unit vectors (the cosine similarity is
+/// their dot product) and `scale` is `exp(logit_scale)`. A category without
+/// prompt scores 0. An embedding that does not have the image's size is
+/// refused, never read as far as it goes.
+pub fn score_from_embeddings<E: AsRef<[f32]>>(
+    image: &[f32],
+    prompts: &[E],
+    negatives: &[E],
+    scale: f32,
+    bias: f32,
+    shift: f32,
+) -> Result<f32, DimensionMismatch> {
+    let best = |set: &[E]| -> Result<Option<f32>, DimensionMismatch> {
+        let mut best: Option<f32> = None;
+        for embedding in set {
+            let embedding = embedding.as_ref();
+            if embedding.len() != image.len() {
+                return Err(DimensionMismatch {
+                    expected: image.len(),
+                    found: embedding.len(),
+                });
+            }
+            let cos: f32 = embedding.iter().zip(image).map(|(a, b)| a * b).sum();
+            best = Some(best.map_or(cos, |b| b.max(cos)));
+        }
+        Ok(best)
+    };
+    let pos = best(prompts)?.unwrap_or(f32::NEG_INFINITY);
+    Ok(concept_score(pos, best(negatives)?, scale, bias, shift))
+}
+
+/// The text half of SigLIP, kept loaded to encode prompts after startup.
+struct TextEncoder {
+    tokenizer: Tokenizer,
+    session: Mutex<Session>,
+}
+
 /// SigLIP vision tower plus prompt embeddings computed once at startup. The
-/// text tower is dropped after that, so it costs memory only while loading.
+/// text tower is dropped after that, so it costs memory only while loading,
+/// unless `keep_text_encoder` keeps it to encode more prompts later.
 pub struct ZeroShot {
     name: String,
     session: Mutex<Session>,
+    text: Option<Box<TextEncoder>>,
     input: ImageInput,
     scale: f32,
     bias: f32,
@@ -207,6 +259,44 @@ fn normalize(v: &mut [f32]) {
 const SIGLIP_TEXT_LEN: usize = 64;
 const SIGLIP_PAD_ID: i64 = 1;
 
+/// Encodes prompts with SigLIP's text half, all in one batch: one unit vector
+/// each. The int8 model scales its activations once per batch, so what a
+/// prompt gives depends on the prompts encoded with it, enough to move a
+/// borderline score by a few hundredths. Whoever encodes a category must
+/// therefore pick its batch with care: the configuration encodes all of its
+/// categories together, and a compiled workflow each category on its own.
+fn encode_prompts(
+    tokenizer: &Tokenizer,
+    session: &mut Session,
+    prompts: &[&str],
+) -> Result<Vec<Vec<f32>>> {
+    if prompts.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut ids = Vec::with_capacity(prompts.len() * SIGLIP_TEXT_LEN);
+    for p in prompts {
+        let enc = tokenizer
+            .encode(canonical_prompt(p), true)
+            .map_err(|e| anyhow!("tokenizing `{p}`: {e}"))?;
+        let mut row: Vec<i64> = enc.get_ids().iter().map(|&i| i as i64).collect();
+        row.truncate(SIGLIP_TEXT_LEN);
+        row.resize(SIGLIP_TEXT_LEN, SIGLIP_PAD_ID);
+        ids.extend(row);
+    }
+    let tensor = Tensor::from_array(([prompts.len(), SIGLIP_TEXT_LEN], ids))?;
+    let outputs = session.run(ort::inputs!["input_ids" => tensor])?;
+    let (shape, data) = outputs["pooler_output"].try_extract_tensor::<f32>()?;
+    let dim = shape[1] as usize;
+    Ok(data
+        .chunks(dim)
+        .map(|row| {
+            let mut v = row.to_vec();
+            normalize(&mut v);
+            v
+        })
+        .collect())
+}
+
 impl ZeroShot {
     #[allow(clippy::too_many_arguments)]
     pub fn load(
@@ -218,60 +308,50 @@ impl ZeroShot {
         logit_scale: f32,
         logit_bias: f32,
         concepts: &BTreeMap<String, ConceptSpec>,
+        keep_text_encoder: bool,
         rt: Runtime,
     ) -> Result<Self> {
-        let tok = Tokenizer::from_file(tokenizer)
-            .map_err(|e| anyhow::anyhow!("{}: {e}", tokenizer.display()))?;
+        let tok =
+            Tokenizer::from_file(tokenizer).map_err(|e| anyhow!("{}: {e}", tokenizer.display()))?;
         let mut text_session = open_session(text, rt)?;
 
-        let mut pairs = Vec::new();
-        for (category, spec) in concepts {
-            for p in spec.prompts() {
-                pairs.push((category.clone(), spec.shift(), false, p.clone()));
-            }
-            for p in spec.negatives() {
-                pairs.push((category.clone(), spec.shift(), true, p.clone()));
-            }
+        // Every prompt of the configuration in one batch, each category's
+        // prompts then its negatives.
+        let mut prompts: Vec<&str> = Vec::new();
+        for spec in concepts.values() {
+            prompts.extend(
+                spec.prompts()
+                    .iter()
+                    .chain(spec.negatives())
+                    .map(String::as_str),
+            );
         }
-        let mut ids = Vec::with_capacity(pairs.len() * SIGLIP_TEXT_LEN);
-        for (_, _, _, p) in &pairs {
-            let enc = tok
-                .encode(canonical_prompt(p), true)
-                .map_err(|e| anyhow::anyhow!("tokenizing `{p}`: {e}"))?;
-            let mut row: Vec<i64> = enc.get_ids().iter().map(|&i| i as i64).collect();
-            row.truncate(SIGLIP_TEXT_LEN);
-            row.resize(SIGLIP_TEXT_LEN, SIGLIP_PAD_ID);
-            ids.extend(row);
-        }
-
-        let mut embeddings = Vec::new();
-        if !pairs.is_empty() {
-            let tensor = Tensor::from_array(([pairs.len(), SIGLIP_TEXT_LEN], ids))?;
-            let outputs = text_session.run(ort::inputs!["input_ids" => tensor])?;
-            let (shape, data) = outputs["pooler_output"].try_extract_tensor::<f32>()?;
-            let dim = shape[1] as usize;
-            for row in data.chunks(dim) {
-                let mut v = row.to_vec();
-                normalize(&mut v);
-                embeddings.push(v);
-            }
-        }
-        drop(text_session);
-
-        let concepts = pairs
-            .into_iter()
-            .zip(embeddings)
-            .map(|((category, shift, negative, _), embedding)| Concept {
-                category,
-                shift,
-                negative,
-                embedding,
+        let mut embeddings = encode_prompts(&tok, &mut text_session, &prompts)?.into_iter();
+        let concepts = concepts
+            .iter()
+            .map(|(category, spec)| Concept {
+                category: category.clone(),
+                shift: spec.shift(),
+                prompts: embeddings.by_ref().take(spec.prompts().len()).collect(),
+                negatives: embeddings.by_ref().take(spec.negatives().len()).collect(),
             })
             .collect();
 
+        // Freed before the vision half loads, as it always was, unless the
+        // configuration asks to keep it.
+        let text = if keep_text_encoder {
+            Some(Box::new(TextEncoder {
+                tokenizer: tok,
+                session: Mutex::new(text_session),
+            }))
+        } else {
+            drop(text_session);
+            None
+        };
         Ok(ZeroShot {
             name: name.to_string(),
             session: Mutex::new(open_session(vision, rt)?),
+            text,
             input,
             scale: logit_scale.exp(),
             bias: logit_bias,
@@ -279,44 +359,89 @@ impl ZeroShot {
         })
     }
 
-    /// One score per category, see [`concept_score`].
-    pub fn run(&self, img: &RgbImage, wanted: &dyn Fn(&str) -> bool) -> Result<Vec<Score>> {
+    /// Whether the text half of the model is still loaded, so that prompts can
+    /// be encoded now (`keep_text_encoder`).
+    pub fn can_encode(&self) -> bool {
+        self.text.is_some()
+    }
+
+    /// Encodes prompts into unit vectors, in one batch. Needs the text half of
+    /// the model, which `keep_text_encoder = true` keeps loaded.
+    pub fn encode(&self, prompts: &[&str]) -> Result<Vec<Vec<f32>>> {
+        let Some(text) = &self.text else {
+            bail!(
+                "{}: its text encoder was freed after startup; set `keep_text_encoder = true` to keep it",
+                self.name
+            );
+        };
+        encode_prompts(&text.tokenizer, &mut lock(&text.session), prompts)
+    }
+
+    /// The unit embedding of an image: one pass of the vision half.
+    pub fn embed(&self, img: &RgbImage) -> Result<Vec<f32>> {
         let s = self.input.size as usize;
         let tensor = Tensor::from_array(([1usize, 3, s, s], to_tensor(img, &self.input)))?;
-        let mut image_embedding = {
+        let mut embedding = {
             let mut session = lock(&self.session);
             let outputs = session.run(ort::inputs!["pixel_values" => tensor])?;
             let (_, data) = outputs["pooler_output"].try_extract_tensor::<f32>()?;
             data.to_vec()
         };
-        normalize(&mut image_embedding);
+        normalize(&mut embedding);
+        Ok(embedding)
+    }
 
-        // category -> (shift, best prompt similarity, best negative similarity)
-        let mut best: BTreeMap<&str, (f32, f32, Option<f32>)> = BTreeMap::new();
-        for c in self.concepts.iter().filter(|c| wanted(&c.category)) {
-            let cos: f32 = c
-                .embedding
-                .iter()
-                .zip(&image_embedding)
-                .map(|(a, b)| a * b)
-                .sum();
-            let entry = best
-                .entry(&c.category)
-                .or_insert((c.shift, f32::NEG_INFINITY, None));
-            if c.negative {
-                entry.2 = Some(entry.2.map_or(cos, |n: f32| n.max(cos)));
-            } else {
-                entry.1 = entry.1.max(cos);
-            }
-        }
-        Ok(best
-            .into_iter()
-            .map(|(category, (shift, pos, neg))| Score {
-                category: category.to_string(),
-                score: concept_score(pos, neg, self.scale, self.bias, shift),
-                source: self.name.clone(),
+    /// One score per category of the configuration that `wanted` accepts,
+    /// from the embedding of an image, see [`score_from_embeddings`].
+    pub fn score(
+        &self,
+        image_embedding: &[f32],
+        wanted: &dyn Fn(&str) -> bool,
+    ) -> Result<Vec<Score>> {
+        self.concepts
+            .iter()
+            .filter(|c| wanted(&c.category))
+            .map(|c| {
+                Ok(Score {
+                    category: c.category.clone(),
+                    score: score_from_embeddings(
+                        image_embedding,
+                        &c.prompts,
+                        &c.negatives,
+                        self.scale,
+                        self.bias,
+                        c.shift,
+                    )?,
+                    source: self.name.clone(),
+                })
             })
-            .collect())
+            .collect()
+    }
+
+    /// The score of a custom category, from the embedding of an image. The
+    /// category must have been encoded by this model.
+    pub fn score_compiled(
+        &self,
+        image_embedding: &[f32],
+        concept: &CompiledConcept,
+    ) -> Result<Score, DimensionMismatch> {
+        Ok(Score {
+            category: concept.name().to_string(),
+            score: score_from_embeddings(
+                image_embedding,
+                concept.prompts(),
+                concept.negatives(),
+                self.scale,
+                self.bias,
+                concept.shift(),
+            )?,
+            source: self.name.clone(),
+        })
+    }
+
+    /// One score per category of the configuration, see [`concept_score`].
+    pub fn run(&self, img: &RgbImage, wanted: &dyn Fn(&str) -> bool) -> Result<Vec<Score>> {
+        self.score(&self.embed(img)?, wanted)
     }
 
     pub fn categories(&self) -> impl Iterator<Item = &str> {

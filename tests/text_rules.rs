@@ -178,6 +178,26 @@ fn rules_flag_personal_data_links_and_spam_without_false_positives() {
 }
 
 #[test]
+fn a_token_with_digits_of_another_script_is_no_iban_and_reads_without_a_crash() {
+    // The regex engine counts the digits of every script as digits, but an
+    // IBAN's are ASCII; a byte-indexed slice used to land inside one of them.
+    let cases = [
+        ("Devanagari digits", char::from_u32(0x0966)),
+        ("fullwidth digits", char::from_u32(0xFF10)),
+        ("Arabic-Indic digits", char::from_u32(0x0660)),
+    ];
+    for (case, digit) in cases {
+        let digit = digit.expect("a valid code point");
+        let text = format!("pay BE{digit}{digit} ABCD EFGH IJKL now");
+        let result = std::panic::catch_unwind(|| categories(&text));
+        match result {
+            Ok(found) => assert!(found.is_empty(), "{case}: flagged {found:?}"),
+            Err(_) => panic!("{case}: the scan crashed"),
+        }
+    }
+}
+
+#[test]
 fn rule_scores_are_certain() {
     for s in scan("mail jane@example.org or +32 470 12 34 56") {
         assert_eq!(s.score, 1.0, "{s:?}");

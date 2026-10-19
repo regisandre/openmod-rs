@@ -188,7 +188,7 @@ impl From<CheckError> for ApiError {
             CheckError::UnknownWorkflow(_) => {
                 ApiError::new(StatusCode::BAD_REQUEST, "unknown_workflow", message)
             }
-            CheckError::Unavailable(_) => ApiError::new(
+            CheckError::Unavailable(_) | CheckError::Incompatible(_) => ApiError::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "workflow_unavailable",
                 message,

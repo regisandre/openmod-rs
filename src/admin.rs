@@ -2,7 +2,8 @@
 //! its own listener. Every API route but the sign-in needs a session, and
 //! every write must come from the interface itself.
 
-use crate::config::{Config, RULE_CATEGORIES};
+use crate::catalog;
+use crate::config::Config;
 use crate::download::{self, Downloads, Needed, Progress};
 use crate::edit::{self, Edit};
 use crate::engine::{Engine, Report, ToolStatus};
@@ -358,21 +359,20 @@ fn tool_json(engine: &Engine, id: &str, builtin: Option<&Tool>) -> Value {
 }
 
 fn categories_json(engine: &Engine, image: bool) -> Vec<Value> {
-    let config = &engine.config;
     let available = engine.available(image);
-    config
-        .known_categories(image)
+    let kind = if image { Kind::Image } else { Kind::Text };
+    catalog::categories(&engine.config)
         .into_iter()
-        .map(|id| {
-            let label = engine.label(&id);
-            let rule = !image && RULE_CATEGORIES.contains(&id.as_str());
+        .filter(|c| c.kind == kind)
+        .map(|c| {
+            let ready = available.contains(&c.id);
             json!({
-                "id": id,
-                "title": label.text,
-                "message": label.message,
-                "tools": config.producers(&id, image),
-                "rule": rule,
-                "available": available.contains(&id),
+                "id": c.id,
+                "title": c.title,
+                "message": c.message,
+                "tools": c.tools,
+                "rule": c.rule,
+                "available": ready,
             })
         })
         .collect()

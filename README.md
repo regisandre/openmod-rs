@@ -37,6 +37,7 @@ choose what runs.
 [Workflows](#workflows) |
 [Configuration](#configuration) |
 [Command line](#command-line) |
+[Use openmod as a library](#use-openmod-as-a-library) |
 [How it works](#how-it-works) |
 [Results](#results) |
 [Sizing](#sizing) |
@@ -182,7 +183,7 @@ volumes:
    it, and install the binary, a system user and the configuration:
 
    ```sh
-   v=v0.5.0   # the latest release
+   v=v0.6.0   # the latest release
    base=https://github.com/regisandre/openmod-rs/releases/download/$v
    curl -fLO "$base/openmod-$v-x86_64-linux.tar.gz"
    curl -fLO "$base/openmod-$v-x86_64-linux.tar.gz.sha256"
@@ -352,7 +353,7 @@ curl -H "Authorization: Bearer $OPENMOD_KEY" -H "Content-Type: application/json"
 ```
 
 `GET /health` needs no key and answers
-`{"status": "ok", "version": "0.5.0", "problems": []}`, or `"degraded"`
+`{"status": "ok", "version": "0.6.0", "problems": []}`, or `"degraded"`
 with one line per enabled tool that is not ready
 (`"problems": ["siglip is not ready"]`).
 
@@ -469,7 +470,9 @@ The file ships with three:
 
 A request that names no workflow uses `default`, which cannot be deleted.
 `openmod validate` refuses a workflow that names a category no model
-produces, so a typo never silently disables a rule.
+produces, so a typo never silently disables a rule. It also refuses a rule
+whose `review` threshold is above its `reject` threshold: every score that
+reaches `review` already rejects, so nothing would ever be sent to review.
 
 **Image categories**:
 - from the models: `nudity`, `underwear`, `swimwear`, `suggestive`,
@@ -650,6 +653,7 @@ bind = "127.0.0.1:8089"
 kind = "image_classifier" | "image_zero_shot" | "text_classifier" | "text_guard"
      | "image_ocr" | "qr_reader" | "domain_list"
 enabled = true
+keep_text_encoder = false  # image_zero_shot only, see "Use openmod as a library"
 
 [workflows.<name>.image]
 <category> = { reject = 0.8, review = 0.5 }
@@ -691,6 +695,112 @@ The models, workflows and labels reload from the admin interface. The
 
 Every command takes `-c <file>` (or `OPENMOD_CONFIG`).
 
+## Use openmod as a library
+
+openmod is also a Rust crate. A program that keeps its workflows somewhere
+other than `openmod.toml`, in a database for instance, can load the engine
+once, validate and compile a workflow it holds as JSON, check content
+against it, and store the compiled form:
+
+```rust
+use openmod::config::{ConceptSpec, Config};
+use openmod::engine::Engine;
+use openmod::workflow::{CompiledWorkflow, WorkflowSpec};
+use std::collections::BTreeMap;
+use std::path::Path;
+
+fn main() -> anyhow::Result<()> {
+    // Load the engine once: it reads the models and keeps them in memory.
+    let engine = Engine::load(Config::load(Path::new("openmod.toml"))?, None);
+
+    // A workflow your program keeps in its own store, as JSON...
+    let spec: WorkflowSpec = serde_json::from_str(
+        r#"{
+            "image": { "nudity": { "reject": 0.8, "review": 0.5 }, "fireworks": { "review": 0.6 } },
+            "text": { "pii_phone": { "review": 1.0 } }
+        }"#,
+    )?;
+    // ...with an image category of its own, described in words.
+    let concepts: BTreeMap<String, ConceptSpec> = serde_json::from_str(
+        r#"{ "fireworks": { "shift": 6.0,
+                            "prompts": ["a photo of fireworks"],
+                            "negatives": ["a photo of a city at night"] } }"#,
+    )?;
+
+    // The same checks, in the same words, as `openmod validate`.
+    let workflow = match engine.compile_workflow(&spec, &concepts) {
+        Ok(workflow) => workflow,
+        Err(problems) => {
+            for problem in &problems {
+                eprintln!("{problem}");
+            }
+            anyhow::bail!("the workflow is not valid");
+        }
+    };
+
+    // A compiled workflow has no name: you give the one the report carries.
+    let report = engine.check_text_with("call me on +32 470 12 34 56", "profile", &workflow)?;
+    println!("{:?}", report.summary.action);
+    let report = engine.check_image_with(&std::fs::read("photo.jpg")?, "profile", &workflow)?;
+    println!("{}", serde_json::to_string_pretty(&report)?);
+
+    // Store it as JSON; reading it back needs no model.
+    let json = serde_json::to_string(&workflow)?;
+    let _workflow: CompiledWorkflow = serde_json::from_str(&json)?;
+    Ok(())
+}
+```
+
+- **Compile.** `compile_workflow` makes the checks of `openmod validate`, in
+  the same words: a category no tool produces, a threshold outside [0, 1], a
+  rule with no threshold, a `review` above its `reject`. It adds two of its
+  own: the workflow needs at least one rule (a configuration file may keep an
+  empty one, which answers `workflow_unavailable`), and a custom category
+  cannot take the name of a category that exists, built in or scored by a
+  configured tool. It returns every problem found, each a `Problem` whose
+  `message` is the text.
+- **Check.** `check_image_with` and `check_text_with` take the name that the
+  report carries. `unchecked` and `workflow_unavailable` mean what they mean
+  for a workflow of `openmod.toml`: they are worked out against what this
+  engine has ready. Like `check_image` and `check_text`, which now run the
+  same code on the workflows of the configuration, they block: call them from
+  a worker thread.
+- **Custom image categories.** Prompts, negatives and a `shift`, as in
+  [Adding an image category](#adding-an-image-category), are encoded when the
+  workflow is compiled, by the first zero-shot model (in name order) that keeps
+  its text half: set `keep_text_encoder = true` in its block of
+  `openmod.toml`. That keeps the text half of SigLIP base, about 111 MB, in
+  memory instead of freeing it after startup. Without it, compiling a workflow
+  that has custom categories returns a problem that says so. The compiled
+  workflow carries the embeddings, so checking it costs one vision pass, like
+  any other category of the model.
+  - A compiled workflow remembers the model that encoded its categories and the
+    size of their embeddings (768 for SigLIP base). Where that model is not
+    ready, the categories are `unchecked`; where it gives embeddings of another
+    size, the check fails with `CheckError::Incompatible`: compile the workflow
+    again.
+  - Each category is encoded on its own, its prompts then its negatives in one
+    batch. The int8 text model scales its activations once per batch, so a
+    category scores exactly like the same one in `[models.siglip.concepts]`
+    when it is the only one there, and can differ when it sits among others:
+    on the 15 categories of the shipped configuration and 36 real images,
+    15 of 540 scores moved by more than 0.05, none by more than 0.2.
+    Calibrate the `shift` of a custom category on its compiled form.
+- **Version.** `openmod::VERSION` is the version of the crate, for a program
+  that reports which openmod it runs.
+- **Store.** A compiled workflow is `Clone` (the data is shared), `Send` and
+  `Sync`. It writes as `{"format": 1, "spec": ..., "concepts": [...]}`, each
+  embedding as the little-endian bytes of its f32 values in base64. Reading
+  refuses another `format`, an embedding that is not base64, is cut short or
+  has not the declared size, and a NaN or an infinite value, which would leave
+  a rule silently unflagged.
+- **Templates and categories.** `openmod::catalog::shipped_workflows()`
+  returns the workflows of the default configuration (`default`, `strict`,
+  `nudity_only`) as specs to compile, and `catalog::shipped_categories()` the
+  categories they can name: id, kind (image or text), title, English message
+  and the tools that score it. `catalog::categories(&config)` lists those of
+  your own configuration.
+
 ## How it works
 
 | Model | On disk | License | Scores |
@@ -717,6 +827,8 @@ Every command takes `-c <file>` (or `OPENMOD_CONFIG`).
   English prompts in `openmod.toml`, plus negatives, the look-alikes that
   pull its score down. The prompts are encoded once at startup, then the
   text half of SigLIP is freed, so an image costs one vision pass.
+  `keep_text_encoder = true` keeps that half (111 MB more in memory), to
+  [add categories at run time](#use-openmod-as-a-library).
 
 **Text and QR codes in images.**
 - The OCR runs PaddleOCR's own pipeline on two ONNX models: the detector

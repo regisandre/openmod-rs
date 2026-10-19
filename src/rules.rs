@@ -61,8 +61,10 @@ static ADVANCE_PAYMENT: LazyLock<Regex> = LazyLock::new(|| {
     .unwrap()
 });
 
+// The check digits are ASCII: `\d` would also take the digits of other scripts.
 static IBAN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\b[A-Za-z]{2}\d{2}(?:\s?[A-Za-z0-9]{4}){2,7}(?:\s?[A-Za-z0-9]{1,4})?\b").unwrap()
+    Regex::new(r"\b[A-Za-z]{2}[0-9]{2}(?:\s?[A-Za-z0-9]{4}){2,7}(?:\s?[A-Za-z0-9]{1,4})?\b")
+        .unwrap()
 });
 
 static CARD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\b(?:\d[ \-]?){12,18}\d\b").unwrap());
@@ -110,7 +112,9 @@ fn iban_valid(raw: &str) -> bool {
         .filter(|c| !c.is_whitespace())
         .collect::<String>()
         .to_ascii_uppercase();
-    if !(15..=34).contains(&s.len()) {
+    // An IBAN is ASCII; checking it first also keeps the byte slices below on
+    // character boundaries.
+    if !s.is_ascii() || !(15..=34).contains(&s.len()) {
         return false;
     }
     let rearranged = format!("{}{}", &s[4..], &s[..4]);

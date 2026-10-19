@@ -128,6 +128,14 @@ fn config_validation_refuses_what_would_silently_disable_a_rule() {
         "dictionary = \"r.yml\"",
         "dictionary = \"r.yml\"\nmax_side = 10",
     );
+    let keeps_encoder = ZERO_SHOT_NEGATIVES.replace(
+        "[models.zs.concepts]",
+        "keep_text_encoder = true\n[models.zs.concepts]",
+    );
+    let misspelled_encoder = ZERO_SHOT_NEGATIVES.replace(
+        "[models.zs.concepts]",
+        "keep_text_encoders = true\n[models.zs.concepts]",
+    );
     // (case, models, workflows, expected error fragment or None when valid)
     let cases: Vec<(&str, &str, &str, Option<&str>)> = vec![
         (
@@ -231,6 +239,18 @@ fn config_validation_refuses_what_would_silently_disable_a_rule() {
             ZERO_SHOT_MISSPELLED,
             "[workflows.default.image]\nviolence = { reject = 0.8 }",
             Some("negative"),
+        ),
+        (
+            "a zero-shot model that keeps its text encoder",
+            &keeps_encoder,
+            "[workflows.default.image]\nviolence = { reject = 0.8 }",
+            None,
+        ),
+        (
+            "a misspelled setting of the same model is refused",
+            &misspelled_encoder,
+            "[workflows.default.image]\nviolence = { reject = 0.8 }",
+            Some("unknown setting `keep_text_encoders`"),
         ),
         (
             "text and QR codes read out of images",

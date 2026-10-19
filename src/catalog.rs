@@ -4,7 +4,12 @@
 //! translations), a short `text` title and a full `message` sentence that a
 //! client can show to its end users as is.
 
+use crate::config::{Config, DEFAULT_CONFIG, RULE_CATEGORIES};
+use crate::tools::Kind;
+use crate::workflow::WorkflowSpec;
+use serde::Serialize;
 use std::collections::BTreeMap;
+use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Label {
@@ -223,9 +228,31 @@ impl Catalog {
         Catalog { labels }
     }
 
+    /// The built-in labels, with the titles and messages that the
+    /// configuration gives (`[labels.<id>]`).
+    pub fn for_config(config: &Config) -> Self {
+        let mut catalog = Catalog::builtin();
+        for (id, l) in &config.labels {
+            catalog.set(
+                id,
+                Label {
+                    text: l.text.clone(),
+                    message: l.message.clone(),
+                },
+            );
+        }
+        catalog
+    }
+
     /// Adds or replaces the label of a category (used by config overrides).
     pub fn set(&mut self, id: &str, label: Label) {
         self.labels.insert(id.to_string(), label);
+    }
+
+    /// Whether `id` has a label of its own: a category built into openmod, or
+    /// one given a title in the configuration.
+    pub fn knows(&self, id: &str) -> bool {
+        self.labels.contains_key(id)
     }
 
     /// The label of `id`: its own, the one of the text category it was read
@@ -262,4 +289,64 @@ impl Catalog {
             })
         })
     }
+}
+
+/// A category a workflow can name, as the catalogue lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Category {
+    /// The stable id, as the rules of a workflow name it.
+    pub id: String,
+    /// Whether it is found in images or in texts.
+    pub kind: Kind,
+    /// A short English title.
+    pub title: String,
+    /// A full English sentence that can be shown to an end user.
+    pub message: String,
+    /// The tools that can score it, enabled or not. A category read out of
+    /// an image names its reader and the tool behind it (`ocr+adult_sites`),
+    /// or the reader alone when openmod's own rules score it.
+    pub tools: Vec<String>,
+    /// Whether openmod's built-in text rules score it: no tool is needed.
+    pub rule: bool,
+}
+
+/// Every category the tools of `config` can score, enabled or not, for images
+/// first and then for texts, by id. Titles and messages are the built-in ones
+/// with the configuration's own.
+pub fn categories(config: &Config) -> Vec<Category> {
+    let catalog = Catalog::for_config(config);
+    let mut out = Vec::new();
+    for (kind, image) in [(Kind::Image, true), (Kind::Text, false)] {
+        for id in config.known_categories(image) {
+            let label = catalog.label(&id);
+            out.push(Category {
+                tools: config.producers(&id, image),
+                rule: !image && RULE_CATEGORIES.contains(&id.as_str()),
+                title: label.text,
+                message: label.message,
+                kind,
+                id,
+            });
+        }
+    }
+    out
+}
+
+/// The default configuration that ships with openmod (`DEFAULT_CONFIG`). It
+/// is checked by the test suite, so reading it never comes back empty.
+fn shipped() -> Option<Config> {
+    Config::parse(DEFAULT_CONFIG, Path::new(".")).ok()
+}
+
+/// The workflows that ship with openmod, by name: `default`, `strict`,
+/// `nudity_only`. Compile them with
+/// [`Engine::compile_workflow`](crate::engine::Engine::compile_workflow) like
+/// any other.
+pub fn shipped_workflows() -> BTreeMap<String, WorkflowSpec> {
+    shipped().map(|c| c.workflows).unwrap_or_default()
+}
+
+/// The catalogue of the default configuration, see [`categories`].
+pub fn shipped_categories() -> Vec<Category> {
+    shipped().map(|c| categories(&c)).unwrap_or_default()
 }

@@ -1,7 +1,9 @@
 //! Loads the enabled models once and runs only those a workflow needs.
 
 use crate::catalog::{Catalog, Label};
-use crate::config::{Config, ModelSpec, QR_CODE, Reader, SecondOpinion, read_category};
+use crate::config::{
+    ConceptSpec, Config, ModelSpec, QR_CODE, Reader, SecondOpinion, read_category,
+};
 use crate::decision::{
     Score, Summary, average_opinions, best_scores, cap_to_verdict, combine_scores, evaluate,
 };
@@ -13,7 +15,9 @@ use crate::models::onnx::{Classifier, Runtime, ZeroShot};
 use crate::models::text_guard::TextGuard;
 use crate::normalize::deobfuscate;
 use crate::tools;
-use crate::workflow::{Unavailable, Workflow};
+use crate::workflow::{
+    CompiledConcept, CompiledWorkflow, Problem, Unavailable, Workflow, WorkflowSpec,
+};
 use crate::{domains, extremism, profanity, qr, rules};
 use anyhow::{Result, bail};
 use image::RgbImage;
@@ -94,6 +98,8 @@ pub enum ToolStatus {
 }
 
 pub struct Engine {
+    /// The configuration this engine was loaded with. Read it, do not change
+    /// it: the models and the workflows were prepared from it at load.
     pub config: Config,
     catalog: Catalog,
     threads: usize,
@@ -103,6 +109,8 @@ pub struct Engine {
     text_available: BTreeSet<String>,
     /// Image category -> (reader, text category), for the ready readers.
     derived: BTreeMap<String, (String, String)>,
+    /// The workflows of the configuration, compiled once at load.
+    workflows: BTreeMap<String, CompiledWorkflow>,
 }
 
 #[derive(Debug, Serialize)]
@@ -125,6 +133,10 @@ pub enum CheckError {
     UnknownWorkflow(String),
     #[error("{0}")]
     Unavailable(String),
+    /// A compiled workflow whose embeddings this server cannot use: another
+    /// model made them. Compile the workflow again.
+    #[error("{0}")]
+    Incompatible(String),
     #[error(transparent)]
     Decode(#[from] DecodeError),
     #[error("the text is longer than {0} characters")]
@@ -152,6 +164,7 @@ fn load_model(name: &str, spec: &ModelSpec, rt: Runtime) -> Result<Model> {
             logit_scale,
             logit_bias,
             concepts,
+            keep_text_encoder,
         } => Model::Image(Arc::new(ImageModel::ZeroShot(ZeroShot::load(
             name,
             &vision,
@@ -161,6 +174,7 @@ fn load_model(name: &str, spec: &ModelSpec, rt: Runtime) -> Result<Model> {
             logit_scale,
             logit_bias,
             &concepts,
+            keep_text_encoder,
             rt,
         )?))),
         ModelSpec::TextGuard {
@@ -289,16 +303,12 @@ impl Engine {
         let image_available = config.categories_where(true, &keep);
         let text_available = config.categories_where(false, &keep);
         let derived = config.derived(&keep);
-        let mut catalog = Catalog::builtin();
-        for (id, l) in &config.labels {
-            catalog.set(
-                id,
-                Label {
-                    text: l.text.clone(),
-                    message: l.message.clone(),
-                },
-            );
-        }
+        let catalog = Catalog::for_config(&config);
+        let workflows = config
+            .workflows
+            .iter()
+            .map(|(name, spec)| (name.clone(), CompiledWorkflow::plain(spec.clone())))
+            .collect();
         let engine = Engine {
             config,
             catalog,
@@ -308,6 +318,7 @@ impl Engine {
             image_available,
             text_available,
             derived,
+            workflows,
         };
         if engine
             .status
@@ -401,20 +412,40 @@ impl Engine {
             .and_then(|s| s.second_opinion.as_ref())
     }
 
+    /// The workflow of the configuration called `name`, compiled at load.
+    fn named(&self, name: &str) -> Result<&CompiledWorkflow, CheckError> {
+        self.workflows
+            .get(name)
+            .ok_or_else(|| CheckError::UnknownWorkflow(name.to_string()))
+    }
+
     /// The workflow section for this kind of content, and the rules of it
     /// that cannot be checked.
-    fn workflow(&self, name: &str, image: bool) -> Result<(&Workflow, Vec<String>), CheckError> {
-        let spec = self
-            .config
-            .workflows
-            .get(name)
-            .ok_or_else(|| CheckError::UnknownWorkflow(name.to_string()))?;
+    fn plan<'a>(
+        &self,
+        name: &str,
+        workflow: &'a CompiledWorkflow,
+        image: bool,
+    ) -> Result<(&'a Workflow, Vec<String>), CheckError> {
+        let spec = workflow.spec();
         let (wf, kind) = if image {
             (&spec.image, "image")
         } else {
             (&spec.text, "text")
         };
-        match wf.plan(self.available(image)) {
+        // A custom category can be scored when the zero-shot model that
+        // encoded it is ready, like a category of the configuration.
+        let custom = |category: &str| {
+            workflow
+                .concept(category)
+                .filter(|_| image)
+                .map(|concept| concept.model())
+        };
+        let available = |category: &str| {
+            self.available(image).contains(category)
+                || custom(category).is_some_and(|model| self.zero_shot(model).is_some())
+        };
+        match wf.plan_with(&available) {
             Ok(unchecked) => Ok((wf, unchecked)),
             Err(Unavailable::NoRules) => Err(CheckError::Unavailable(format!(
                 "workflow `{name}` has no {kind} rules"
@@ -423,10 +454,10 @@ impl Engine {
                 let needs: Vec<String> = categories
                     .iter()
                     .map(|c| {
-                        format!(
-                            "`{c}` needs {}",
-                            self.config.producers(c, image).join(" or ")
-                        )
+                        let tools = custom(c)
+                            .map(str::to_string)
+                            .unwrap_or_else(|| self.config.producers(c, image).join(" or "));
+                        format!("`{c}` needs {tools}")
                     })
                     .collect();
                 Err(CheckError::Unavailable(format!(
@@ -462,26 +493,92 @@ impl Engine {
         }
     }
 
-    /// Blocking: call from a worker thread.
+    /// Checks an image against the workflow of the configuration called
+    /// `workflow`. Blocking: call from a worker thread.
     pub fn check_image(&self, bytes: &[u8], workflow: &str) -> Result<Report, CheckError> {
+        self.check_image_with(bytes, workflow, self.named(workflow)?)
+    }
+
+    /// Checks an image against a compiled workflow. `name` is what the
+    /// report calls it: the workflow carries no name of its own. Blocking:
+    /// call from a worker thread.
+    pub fn check_image_with(
+        &self,
+        bytes: &[u8],
+        name: &str,
+        workflow: &CompiledWorkflow,
+    ) -> Result<Report, CheckError> {
         let start = Instant::now();
-        let (wf, unchecked) = self.workflow(workflow, true)?;
+        let (wf, unchecked) = self.plan(name, workflow, true)?;
         let img = decode(bytes, self.config.server.max_image_pixels)?;
         let wanted = |c: &str| wf.rules.contains_key(c);
         let mut scores = Vec::new();
         for slot in &self.slots {
             match &slot.model {
-                Model::Image(model) if slot.categories.iter().any(|c| wanted(c)) => {
-                    match model.as_ref() {
-                        ImageModel::Classifier(c) => scores.extend(c.run(&img)?),
-                        ImageModel::ZeroShot(z) => scores.extend(z.run(&img, &wanted)?),
+                Model::Image(model) => match model.as_ref() {
+                    ImageModel::Classifier(c) if slot.categories.iter().any(|id| wanted(id)) => {
+                        scores.extend(c.run(&img)?)
                     }
-                }
+                    ImageModel::ZeroShot(z) => scores
+                        .extend(self.zero_shot_scores(slot, z, name, workflow, &img, &wanted)?),
+                    ImageModel::Classifier(_) => {}
+                },
                 Model::Qr | Model::Ocr(_) => scores.extend(self.read_image(slot, &img, &wanted)?),
                 _ => {}
             }
         }
-        Ok(self.report(workflow, wf, scores, unchecked, start))
+        Ok(self.report(name, wf, scores, unchecked, start))
+    }
+
+    /// The ready zero-shot model called `name`.
+    fn zero_shot(&self, name: &str) -> Option<&ZeroShot> {
+        self.slots
+            .iter()
+            .filter(|s| s.name == name)
+            .find_map(|s| match &s.model {
+                Model::Image(model) => match model.as_ref() {
+                    ImageModel::ZeroShot(z) => Some(z),
+                    ImageModel::Classifier(_) => None,
+                },
+                _ => None,
+            })
+    }
+
+    /// What a zero-shot model scores: the categories of the configuration the
+    /// workflow wants, and the custom categories of the workflow that this
+    /// model encoded. The image goes through the model once for all of them.
+    fn zero_shot_scores(
+        &self,
+        slot: &Slot,
+        model: &ZeroShot,
+        name: &str,
+        workflow: &CompiledWorkflow,
+        img: &RgbImage,
+        wanted: &dyn Fn(&str) -> bool,
+    ) -> Result<Vec<Score>, CheckError> {
+        let custom: Vec<&CompiledConcept> = workflow
+            .concepts()
+            .iter()
+            .filter(|c| c.model() == slot.name && wanted(c.name()))
+            .collect();
+        if custom.is_empty() && !slot.categories.iter().any(|c| wanted(c)) {
+            return Ok(Vec::new());
+        }
+        let embedding = model.embed(img)?;
+        let mut scores = model.score(&embedding, wanted)?;
+        for concept in custom {
+            let score = model.score_compiled(&embedding, concept).map_err(|e| {
+                CheckError::Incompatible(format!(
+                    "workflow `{name}` was compiled with another model: the embeddings of `{}` hold {} values, `{}` gives {}; compile the workflow again",
+                    concept.name(),
+                    e.found,
+                    slot.name,
+                    e.expected
+                ))
+            })?;
+            scores.push(score);
+        }
+        Ok(scores)
     }
 
     /// What a reader finds in the image, checked like a text: each text
@@ -618,16 +715,111 @@ impl Engine {
         Ok(scores)
     }
 
-    /// Blocking: call from a worker thread.
+    /// Checks a text against the workflow of the configuration called
+    /// `workflow`. Blocking: call from a worker thread.
     pub fn check_text(&self, text: &str, workflow: &str) -> Result<Report, CheckError> {
+        self.check_text_with(text, workflow, self.named(workflow)?)
+    }
+
+    /// Checks a text against a compiled workflow. `name` is what the report
+    /// calls it: the workflow carries no name of its own. Blocking: call from
+    /// a worker thread.
+    pub fn check_text_with(
+        &self,
+        text: &str,
+        name: &str,
+        workflow: &CompiledWorkflow,
+    ) -> Result<Report, CheckError> {
         let start = Instant::now();
-        let (wf, unchecked) = self.workflow(workflow, false)?;
+        let (wf, unchecked) = self.plan(name, workflow, false)?;
         let max = self.config.server.max_text_chars;
         if text.chars().count() > max {
             return Err(CheckError::TextTooLong(max));
         }
         let wanted = |c: &str| wf.rules.contains_key(c);
         let scores = self.text_scores(text, &wanted)?;
-        Ok(self.report(workflow, wf, scores, unchecked, start))
+        Ok(self.report(name, wf, scores, unchecked, start))
+    }
+
+    /// Validates a workflow that does not come from the configuration file,
+    /// with the same checks and the same words as `openmod validate`, and
+    /// makes it ready to check against.
+    ///
+    /// `concepts` are custom image categories, described in words and named
+    /// here: the rules of the workflow may use them like any other category.
+    /// Their prompts and negatives are encoded once, now, by the zero-shot
+    /// model, whose text half must have been kept for that
+    /// (`keep_text_encoder = true`); the compiled workflow carries the
+    /// embeddings. Blocking: call from a worker thread.
+    pub fn compile_workflow(
+        &self,
+        spec: &WorkflowSpec,
+        concepts: &BTreeMap<String, ConceptSpec>,
+    ) -> Result<CompiledWorkflow, Vec<Problem>> {
+        let problems = self.config.workflow_problems(spec, concepts);
+        if !problems.is_empty() {
+            return Err(problems);
+        }
+        let encoded = self.encode_concepts(concepts).map_err(|p| vec![p])?;
+        CompiledWorkflow::new(spec.clone(), encoded).map_err(|p| vec![p])
+    }
+
+    /// The first ready zero-shot model that kept its text encoder, with its
+    /// name, or why there is none.
+    fn text_encoder(&self) -> Result<(&str, &ZeroShot), Problem> {
+        let zero_shot: Vec<&str> = self
+            .config
+            .models
+            .iter()
+            .filter(|(_, e)| matches!(e.spec, ModelSpec::ImageZeroShot { .. }))
+            .map(|(name, _)| name.as_str())
+            .collect();
+        let ready: Vec<(&str, &ZeroShot)> = zero_shot
+            .iter()
+            .filter_map(|name| self.zero_shot(name).map(|z| (*name, z)))
+            .collect();
+        if let Some(found) = ready.iter().find(|(_, z)| z.can_encode()) {
+            return Ok(*found);
+        }
+        Err(Problem::new(match (zero_shot.first(), ready.first()) {
+            (None, _) => "custom categories need a zero-shot image model (kind = \"image_zero_shot\"), and the configuration has none".to_string(),
+            (Some(name), None) => format!(
+                "custom categories need the zero-shot image model `{name}`, which is disabled or not ready"
+            ),
+            (_, Some((name, _))) => format!(
+                "custom categories need a zero-shot image model that keeps its text encoder: set `keep_text_encoder = true` in `[models.{name}]`"
+            ),
+        }))
+    }
+
+    /// Encodes each concept: its prompts, then its negatives, in one batch,
+    /// the way the configuration's concepts are encoded at startup.
+    fn encode_concepts(
+        &self,
+        concepts: &BTreeMap<String, ConceptSpec>,
+    ) -> Result<Vec<CompiledConcept>, Problem> {
+        if concepts.is_empty() {
+            return Ok(Vec::new());
+        }
+        let (model, zero_shot) = self.text_encoder()?;
+        concepts
+            .iter()
+            .map(|(name, spec)| {
+                let texts: Vec<&str> = spec
+                    .prompts()
+                    .iter()
+                    .chain(spec.negatives())
+                    .map(String::as_str)
+                    .collect();
+                let vectors = zero_shot.encode(&texts).map_err(|e| {
+                    Problem::new(format!("could not encode concept `{name}`: {e:#}"))
+                })?;
+                let dimension = vectors.first().map_or(0, Vec::len);
+                let mut pairs = texts.iter().map(|t| t.to_string()).zip(vectors);
+                let prompts = pairs.by_ref().take(spec.prompts().len()).collect();
+                let negatives = pairs.collect();
+                CompiledConcept::new(name, model, dimension, spec.shift(), prompts, negatives)
+            })
+            .collect()
     }
 }

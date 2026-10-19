@@ -1,10 +1,57 @@
 # Changelog
 
 > Status: maintained with every release.
-> Last checked: 2026-10-18
+> Last checked: 2026-10-19
 
-## Unreleased
+## 0.6.0 - 2026-10-19
 
+A program can now use openmod as a library with workflows that live
+somewhere other than `openmod.toml`: see "Use openmod as a library" in the
+README.
+
+- **Compile a workflow**: `Engine::compile_workflow(&spec, &concepts)`
+  validates a `WorkflowSpec` (a `[workflows.<name>]` block, or the same
+  object as JSON) with the checks of `openmod validate` and in the same words,
+  and returns a `CompiledWorkflow`, or every `Problem` found. Both go through
+  one function, so the same mistake gives the same text. A compiled workflow
+  needs at least one rule (a configuration file may still hold a workflow
+  without rules, which answers `workflow_unavailable`), and a custom category
+  cannot take the name of one that exists.
+- **Check against a compiled workflow**: `Engine::check_image_with` and
+  `check_text_with` take the name the report carries, since a compiled
+  workflow has none. `check_image` and `check_text` run the same code on the
+  workflows of the configuration. `unchecked` and `workflow_unavailable` keep
+  their meaning, worked out against what the engine has ready.
+- **Image categories added at run time**: a zero-shot model block takes
+  `keep_text_encoder = true` (default `false`), which keeps the text half of
+  SigLIP, about 111 MB, in memory instead of freeing it after startup. A
+  workflow compiled with custom categories (prompts, negatives and a `shift`)
+  then carries their embeddings, and checking it costs one vision pass. A
+  model that frees its text half, or that is not ready, gives a problem that
+  says so. A category scores like the same one in the configuration when it
+  is encoded in the same batch, that is when it is alone in its block; among
+  others it can differ by a few hundredths, because the int8 text model scales
+  its activations per batch. A workflow compiled by a model whose embeddings
+  have another size is refused when checked (`CheckError::Incompatible`).
+- **A stored form for compiled workflows**: a `CompiledWorkflow` is `Clone`,
+  `Send` and `Sync`, and writes as JSON, `{"format": 1, "spec": ...,
+  "concepts": [...]}`, with each embedding as base64 of little-endian f32.
+  Reading refuses another `format`, an embedding that is cut short, has not
+  the declared size or holds a NaN or an infinite value.
+- **Shipped workflows and categories**: `openmod::catalog` exposes the
+  workflows of the default configuration (`shipped_workflows`) and the
+  category catalogue (`categories(&config)`, `shipped_categories`): for each
+  category its id, kind, title, English message and the tools that score it.
+- **The version**: `openmod::VERSION` is the version of the crate, for a
+  program that embeds openmod and reports which one it runs.
+- **Changed**: a rule whose `review` threshold is above its `reject` threshold
+  is refused, in `openmod.toml` and when compiling: every score that reaches
+  `review` already rejects, so such a rule never sent anything to review.
+  Lower its `review`, or remove it. The shipped workflows are not concerned.
+- `WorkflowSpec` now lives in `openmod::workflow` (`openmod::config` still
+  exports it), `CheckError` has a variant `Incompatible`, and `ZeroShot::run`
+  is split into `embed` and `score` so that one image pass serves every
+  category.
 - **Fixed**: every refusal of the API comes in the error envelope. A body
   over `max_upload_bytes` is `body_too_large` (413); a text that is not JSON
   or has no `text` is `bad_request` (400, it was a plain-text 422); a text
@@ -13,6 +60,10 @@
   plain text before. `/v1/text` and `/v1/image` check the key first.
 - **Fixed**: an image wider or taller than 16,384 pixels was refused as
   "larger than 0 pixels"; the message now states both limits.
+- **Fixed**: a token shaped like an IBAN whose check digits were digits of
+  another script (Devanagari, Arabic-Indic, fullwidth) crashed the check with
+  a 500, in a text and in the text or QR code of an image. Such a token is not
+  an IBAN: the rule now takes ASCII digits only.
 - README: what a first install needs before the first command, the steps
   of the Quick start and of the systemd install from a release archive, a
   Compose memory limit that fits the default tools, the HTTP answers that
