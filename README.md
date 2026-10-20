@@ -1122,6 +1122,18 @@ python tools/category_rates.py scores.jsonl        # texts: hit rates per catego
   can panic on a malformed image; the panic is caught and the image holds
   no code.
 
+### Run it with ClamAV
+
+openmod judges what an image shows; it does not look for malware. A picture
+that passes moderation can still carry an exploit for an image library or
+hide a payload in a polyglot file, and an upload form usually takes more
+than images. Add [ClamAV](https://www.clamav.net) on the same server and
+call `clamd` from your upload handler next to openmod: reject a detected
+file before it is stored, whatever openmod said about it. If you also run
+[openfraud](https://github.com/regisandre/openfraud-rs), put the SHA-256 of
+a detected file in its `malware_hashes` list so whoever uploads it again is
+quarantined.
+
 Found a vulnerability? Please report it privately through GitHub's
 "Report a vulnerability" on the Security tab rather than in an issue.
 
