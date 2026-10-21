@@ -1134,6 +1134,12 @@ file before it is stored, whatever openmod said about it. If you also run
 a detected file in its `malware_hashes` list so whoever uploads it again is
 quarantined.
 
+For the server around it, [CrowdSec](https://www.crowdsec.net) and
+[Fail2Ban](https://github.com/fail2ban/fail2ban) block addresses that scan
+or brute-force the host, and [AIDE](https://aide.github.io/) reports any
+file that changes afterwards, such as a swapped binary or model, or a
+rewritten config.
+
 Found a vulnerability? Please report it privately through GitHub's
 "Report a vulnerability" on the Security tab rather than in an issue.
 
