@@ -1,7 +1,16 @@
 # Changelog
 
 > Status: maintained with every release.
-> Last checked: 2026-10-19
+> Last checked: 2026-10-22
+
+## 0.6.1 - 2026-10-22
+
+- **Compromised eMudhra CA removed from the trust roots**: `webpki-roots`
+  1.0.9 to 1.0.10 and `rustls-webpki` 0.103.15 to 0.103.16. Eight eMudhra
+  intermediate CA keys were disclosed as compromised on 2026-10-20, and the
+  `emSign ECC Root CA - G3` root that signed them is gone from the bundled
+  roots. openmod downloads its models over HTTPS with these roots, so a
+  forged certificate for the model host would have been accepted before.
 
 ## 0.6.0 - 2026-10-19
 
