@@ -1138,7 +1138,14 @@ For the server around it, [CrowdSec](https://www.crowdsec.net) and
 [Fail2Ban](https://github.com/fail2ban/fail2ban) block addresses that scan
 or brute-force the host, and [AIDE](https://aide.github.io/) reports any
 file that changes afterwards, such as a swapped binary or model, or a
-rewritten config.
+rewritten config. [Lynis](https://cisofy.com/lynis/) gives the server a
+one-off audit (`lynis audit system`): a hardening score and a list of what to
+fix, to run after the first install and after big changes.
+[Trivy](https://trivy.dev) scans the Docker image you run for known
+vulnerabilities, leaked secrets and misconfigurations
+(`trivy image ghcr.io/regisandre/openmod-rs:<version>`): scan again when you
+pull a new version, and on a schedule, since new CVEs are published against
+images that did not change.
 
 Found a vulnerability? Please report it privately through GitHub's
 "Report a vulnerability" on the Security tab rather than in an issue.
