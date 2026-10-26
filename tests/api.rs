@@ -181,3 +181,60 @@ async fn a_refused_request_gets_the_error_envelope_and_a_true_reason() {
     }
     assert!(failures.is_empty(), "\n{}", failures.join("\n"));
 }
+
+#[tokio::test]
+async fn a_check_keeps_its_place_until_the_work_ends_even_if_the_caller_leaves() {
+    use openmod::server::run_check;
+    use std::time::Duration;
+
+    let config = Config::parse(
+        r#"
+[server]
+max_concurrent = 1
+
+[workflows.default.text]
+pii_phone = { review = 1.0 }
+"#,
+        Path::new("."),
+    )
+    .unwrap();
+    let state = std::env::temp_dir().join(format!("openmod-permit-{}.toml", std::process::id()));
+    let keys = LiveKeys::load(KeySet::from_lines([KEY].into_iter()).unwrap(), &state).unwrap();
+    let app = Arc::new(App::new(
+        Engine::load(config, None),
+        keys,
+        PathBuf::from("openmod.toml"),
+    ));
+
+    // The first check blocks until told to go on; its caller gives up at once.
+    let (go, wait) = std::sync::mpsc::channel::<()>();
+    let first = run_check(&app, move |engine| {
+        let _ = wait.recv();
+        engine.check_text("hello", "default")
+    });
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), first)
+            .await
+            .is_err(),
+        "the first check should still be running when its caller leaves"
+    );
+
+    // While that work runs, the only place stays taken.
+    let second = run_check(&app, |engine| engine.check_text("hello", "default"));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(300), second)
+            .await
+            .is_err(),
+        "a second check got in while the first one still ran"
+    );
+
+    // When the work ends, the place is free again.
+    go.send(()).unwrap();
+    let third = run_check(&app, |engine| engine.check_text("hello", "default"));
+    assert!(
+        tokio::time::timeout(Duration::from_secs(5), third)
+            .await
+            .expect("the place frees when the work ends")
+            .is_ok()
+    );
+}

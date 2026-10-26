@@ -13,7 +13,7 @@ use crate::models::gliner::Gliner;
 use crate::models::ocr::Ocr;
 use crate::models::onnx::{Classifier, Runtime, ZeroShot};
 use crate::models::text_guard::TextGuard;
-use crate::normalize::deobfuscate;
+use crate::normalize::{collapse_repeats, deobfuscate_within};
 use crate::tools;
 use crate::workflow::{
     CompiledConcept, CompiledWorkflow, Problem, Unavailable, Workflow, WorkflowSpec,
@@ -625,7 +625,11 @@ impl Engine {
         let text: String = lines.join("\n").chars().take(max).collect();
         let in_text = |c: &str| bases.contains(c);
         let found = match reader {
-            Reader::Qr => self.rule_scores(&text, &deobfuscate(&text), &in_text),
+            Reader::Qr => {
+                let model_text =
+                    deobfuscate_within(&text, max).ok_or(CheckError::TextTooLong(max))?;
+                self.rule_scores(&text, &model_text, &in_text)
+            }
             Reader::Ocr => self.text_scores(&text, &in_text)?,
         };
         out.extend(
@@ -650,8 +654,12 @@ impl Engine {
         wanted: &dyn Fn(&str) -> bool,
     ) -> Vec<Score> {
         let mut scores = rules::scan(text);
-        scores.extend(profanity::scan(model_text));
-        scores.extend(extremism::scan(text, model_text));
+        // A word stretched on purpose ("fuuuck") is also read with its repeats collapsed.
+        let collapsed = collapse_repeats(model_text);
+        scores.extend(profanity::scan(model_text).or_else(|| profanity::scan(&collapsed)));
+        scores.extend(
+            extremism::scan(text, model_text).or_else(|| extremism::scan(text, &collapsed)),
+        );
         let lists: Vec<(&Slot, &DomainList)> = self
             .slots
             .iter()
@@ -686,7 +694,8 @@ impl Engine {
         wanted: &dyn Fn(&str) -> bool,
     ) -> Result<Vec<Score>, CheckError> {
         // Rules read the raw text; models read it with obfuscation undone.
-        let model_text = deobfuscate(text);
+        let max = self.config.server.max_text_chars;
+        let model_text = deobfuscate_within(text, max).ok_or(CheckError::TextTooLong(max))?;
         let mut scores = self.rule_scores(text, &model_text, wanted);
         let text_slots = || {
             self.slots.iter().filter_map(|s| match &s.model {

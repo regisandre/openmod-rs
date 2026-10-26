@@ -1,6 +1,7 @@
 //! What the text models see: obfuscation tricks are undone first.
 
-use openmod::normalize::deobfuscate;
+use openmod::normalize::{collapse_repeats, deobfuscate, deobfuscate_within};
+use openmod::profanity::contains_profanity;
 
 #[test]
 fn common_obfuscations_are_undone_and_normal_text_is_kept() {
@@ -74,4 +75,61 @@ fn common_obfuscations_are_undone_and_normal_text_is_kept() {
     for (case, input, expected) in cases {
         assert_eq!(deobfuscate(input), expected, "{case}");
     }
+}
+
+#[test]
+fn a_text_that_grows_past_twice_the_limit_when_normalized_is_refused() {
+    let ligatures = "\u{FDFA}".repeat(20_000);
+    let plain = "a".repeat(20_000);
+    let few = format!("{}{}", "a".repeat(19_000), "\u{FDFA}".repeat(10));
+    let under = "ab".repeat(19_999);
+    let over = "ab".repeat(20_001);
+    // (case, input, the limit in characters, kept)
+    let cases: Vec<(&str, &str, usize, bool)> = vec![
+        ("an 18-fold ligature flood", &ligatures, 20_000, false),
+        ("plain letters at the limit", &plain, 20_000, true),
+        ("a few ligatures in a normal text", &few, 20_000, true),
+        ("just under twice the limit", &under, 20_000, true),
+        ("just over twice the limit", &over, 20_000, false),
+    ];
+    let mut failures = Vec::new();
+    for (case, input, max, kept) in cases {
+        let got = deobfuscate_within(input, max);
+        if got.is_some() != kept {
+            failures.push(format!("{case}: kept = {}, want {kept}", got.is_some()));
+        }
+        if let Some(text) = got
+            && text != deobfuscate(input)
+        {
+            failures.push(format!("{case}: the kept text differs from deobfuscate"));
+        }
+    }
+    assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+}
+
+#[test]
+fn a_stretched_swear_word_is_still_found() {
+    // (case, text, found)
+    let cases = [
+        ("stretched vowel", "fuuuuck you", true),
+        ("stretched in the middle", "what a shiiiit show", true),
+        ("stretched twice", "biiiitch pleeease", true),
+        ("a plain swear word", "fuck you", true),
+        ("double letters kept", "espece de connard", true),
+        (
+            "a harmless stretched word",
+            "nooooo way, that is greaaat",
+            false,
+        ),
+        ("a harmless text", "see you at the cocktail class", false),
+    ];
+    let mut failures = Vec::new();
+    for (case, text, want) in cases {
+        let folded = deobfuscate(text);
+        let found = contains_profanity(&folded) || contains_profanity(&collapse_repeats(&folded));
+        if found != want {
+            failures.push(format!("{case}: found = {found}, want {want}"));
+        }
+    }
+    assert!(failures.is_empty(), "\n{}", failures.join("\n"));
 }

@@ -42,6 +42,20 @@ fn squeeze_floods(text: &str) -> String {
     out
 }
 
+/// Every run of the same letter becomes one ("fuuuck" -> "fuck"), so a word
+/// stretched on purpose still meets the word lists.
+pub fn collapse_repeats(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut prev = None;
+    for c in text.chars() {
+        if Some(c) != prev || !c.is_alphabetic() {
+            out.push(c);
+        }
+        prev = Some(c);
+    }
+    out
+}
+
 /// A letter standing alone, maybe followed by punctuation ("r", "r.").
 fn lone_letter(token: &str) -> Option<(char, &str)> {
     let mut chars = token.chars();
@@ -141,6 +155,15 @@ fn undo_leetspeak(text: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// [`deobfuscate`], but `None` when the result holds more than twice
+/// `max_chars` characters. Normalization can swell a text (one U+FDFA becomes
+/// eighteen characters), and the models read the swollen text, so the limit on
+/// the raw text alone does not bound their work.
+pub fn deobfuscate_within(text: &str, max_chars: usize) -> Option<String> {
+    let out = deobfuscate(text);
+    (out.chars().count() <= max_chars.saturating_mul(2)).then_some(out)
 }
 
 pub fn deobfuscate(text: &str) -> String {

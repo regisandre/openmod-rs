@@ -235,6 +235,24 @@ fn a_category_several_models_score_combines_as_configured() {
             "gore",
             (0.8, "owen"),
         ),
+        (
+            "a score that is not a number never replaces a real one",
+            vec![
+                score("gore", 0.9, "owen"),
+                score("gore", f32::NAN, "siglip"),
+            ],
+            "gore",
+            (0.9, "owen"),
+        ),
+        (
+            "nor does it come first and hide the next one",
+            vec![
+                score("gore", f32::NAN, "siglip"),
+                score("gore", 0.4, "owen"),
+            ],
+            "gore",
+            (0.4, "owen"),
+        ),
     ];
     for (case, scores, category, (expected, source)) in cases {
         let best = best_scores(&combine_scores(scores, &rules));

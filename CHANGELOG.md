@@ -1,7 +1,19 @@
 # Changelog
 
 > Status: maintained with every release.
-> Last checked: 2026-10-22
+> Last checked: 2026-10-26
+
+## 0.6.2 - 2026-10-26
+
+Hardening of the request path.
+
+- **Bounded memory and work per request**: an image is cropped to its centred
+  square before it is resized, a text is bounded after normalization as well
+  as before it, and a check keeps its place in the queue until its work ends.
+- **Word lists**: a word stretched on purpose ("fuuuck") is also read with its
+  repeated letters collapsed.
+- **Scores**: a score that is not a number no longer replaces a real one.
+- **Dependencies**: `webpki-root-certs` 1.0.9 to 1.0.11.
 
 ## 0.6.1 - 2026-10-22
 

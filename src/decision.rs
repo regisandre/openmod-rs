@@ -50,6 +50,11 @@ pub struct Summary {
 pub fn best_scores(scores: &[Score]) -> BTreeMap<String, Score> {
     let mut best: BTreeMap<String, Score> = BTreeMap::new();
     for s in scores {
+        // A score that is not a number compares false with everything: it would replace a real
+        // one and slip under every threshold.
+        if s.score.is_nan() {
+            continue;
+        }
         match best.get(&s.category) {
             Some(current) if current.score >= s.score => {}
             _ => {

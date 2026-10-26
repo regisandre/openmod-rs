@@ -74,18 +74,27 @@ fn filter(f: Filter) -> FilterType {
     }
 }
 
+/// The centred square a `ShorterSideCrop` keeps of a `w` x `h` image: its
+/// corner and its side. It never leaves the image, and an empty side counts
+/// as one pixel.
+pub fn shorter_side_crop(w: u32, h: u32) -> (u32, u32, u32) {
+    let side = w.min(h).max(1);
+    (w.saturating_sub(side) / 2, h.saturating_sub(side) / 2, side)
+}
+
 /// Resizes and normalizes an image into a `[1, 3, size, size]` CHW tensor.
 pub fn to_tensor(img: &RgbImage, spec: &ImageInput) -> Vec<f32> {
     let size = spec.size;
     let resized = match spec.resize {
         Resize::Stretch => image::imageops::resize(img, size, size, filter(spec.filter)),
         Resize::ShorterSideCrop => {
+            // Cut the centred square first, then resize it: scaling the whole
+            // image up to the model size would turn a 16384 x 1 strip into a
+            // multi-gigabyte buffer.
             let (w, h) = img.dimensions();
-            let scale = size as f32 / w.min(h).max(1) as f32;
-            let nw = ((w as f32 * scale).round() as u32).max(size);
-            let nh = ((h as f32 * scale).round() as u32).max(size);
-            let big = image::imageops::resize(img, nw, nh, filter(spec.filter));
-            image::imageops::crop_imm(&big, (nw - size) / 2, (nh - size) / 2, size, size).to_image()
+            let (x, y, side) = shorter_side_crop(w, h);
+            let square = image::imageops::crop_imm(img, x, y, side, side);
+            image::imageops::resize(&*square, size, size, filter(spec.filter))
         }
     };
 

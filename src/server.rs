@@ -31,7 +31,7 @@ const QUEUE_TIMEOUT: Duration = Duration::from_secs(30);
 pub struct App {
     engine: RwLock<Arc<Engine>>,
     keys: Mutex<LiveKeys>,
-    permits: Semaphore,
+    permits: Arc<Semaphore>,
     pub config_path: PathBuf,
     pub state_path: PathBuf,
     allow_unauthenticated: bool,
@@ -47,7 +47,7 @@ impl App {
     /// The state both listeners share, around a loaded engine and its keys.
     pub fn new(engine: Engine, keys: LiveKeys, config_path: PathBuf) -> App {
         let server = &engine.config.server;
-        let permits = Semaphore::new(server.max_concurrent.max(1));
+        let permits = Arc::new(Semaphore::new(server.max_concurrent.max(1)));
         let state_path = server.state_file.clone();
         let allow_unauthenticated = server.allow_unauthenticated;
         App {
@@ -235,7 +235,7 @@ pub async fn run_check<F>(app: &App, f: F) -> Result<Report, ApiError>
 where
     F: FnOnce(&Engine) -> Result<Report, CheckError> + Send + 'static,
 {
-    let permit = tokio::time::timeout(QUEUE_TIMEOUT, app.permits.acquire())
+    let permit = tokio::time::timeout(QUEUE_TIMEOUT, app.permits.clone().acquire_owned())
         .await
         .map_err(|_| {
             ApiError::new(
@@ -252,16 +252,20 @@ where
             )
         })?;
     let engine = app.engine();
-    let result = tokio::task::spawn_blocking(move || f(&engine))
-        .await
-        .map_err(|_| {
-            ApiError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal",
-                "check crashed",
-            )
-        })?;
-    drop(permit);
+    // The place goes with the work, not with the caller: a client that hangs
+    // up leaves the check running, and the place stays taken until it ends.
+    let result = tokio::task::spawn_blocking(move || {
+        let _place = permit;
+        f(&engine)
+    })
+    .await
+    .map_err(|_| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal",
+            "check crashed",
+        )
+    })?;
     Ok(result?)
 }
 
