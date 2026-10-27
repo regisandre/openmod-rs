@@ -5,12 +5,8 @@
 
 ## 0.6.3 - 2026-10-27
 
-- **Supply chain**: CI runs `cargo deny check` (RustSec advisories,
-  permissive licenses only, no unknown registry or git source); the policy is
-  in `deny.toml`.
-- **Contributors**: the integration tests build as one test binary
-  (`tests/it/`), and image and QR decoding are optimized in the dev profile,
-  so `cargo test` runs several times faster.
+Maintenance release: nothing changes in the server, the API or the
+configuration.
 
 ## 0.6.2 - 2026-10-26
 
@@ -101,8 +97,6 @@ README.
 - `rust-version` is 1.92, what `ort` 2.0.0-rc.14 needs (it said 1.85).
 - `tools/calibrate.py` reads a dump of `--images` and `--texts` together
   instead of failing on its text rows.
-- A `.dockerignore`: `docker build` no longer sends `target/`, the models
-  and the corpus to the builder.
 
 ## 0.5.0 - 2026-10-16
 
