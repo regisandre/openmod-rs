@@ -1,7 +1,16 @@
 # Changelog
 
 > Status: maintained with every release.
-> Last checked: 2026-10-26
+> Last checked: 2026-10-27
+
+## 0.6.3 - 2026-10-27
+
+- **Supply chain**: CI runs `cargo deny check` (RustSec advisories,
+  permissive licenses only, no unknown registry or git source); the policy is
+  in `deny.toml`.
+- **Contributors**: the integration tests build as one test binary
+  (`tests/it/`), and image and QR decoding are optimized in the dev profile,
+  so `cargo test` runs several times faster.
 
 ## 0.6.2 - 2026-10-26
 
