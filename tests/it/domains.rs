@@ -207,7 +207,7 @@ fn links_are_found_in_free_text() {
 
 #[test]
 fn a_text_linking_to_a_listed_site_scores_the_list_category() {
-    let dir = std::env::temp_dir().join(format!("openmod-lists-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("openmod-domains-lists-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("lists")).unwrap();
     std::fs::write(

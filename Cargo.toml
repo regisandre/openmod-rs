@@ -1,6 +1,6 @@
 [package]
 name = "openmod"
-version = "0.6.2"
+version = "0.6.3"
 edition = "2024"
 rust-version = "1.92"
 license = "Apache-2.0"
@@ -46,3 +46,19 @@ tower = { version = "0.5", default-features = false, features = ["util"] }
 lto = "fat"
 codegen-units = 1
 strip = true
+
+# Image decoding and QR reading are far too slow unoptimized for the tests.
+[profile.dev.package.rqrr]
+opt-level = 3
+
+[profile.dev.package.image]
+opt-level = 3
+
+[profile.dev.package.png]
+opt-level = 3
+
+[profile.dev.package.fdeflate]
+opt-level = 3
+
+[profile.dev.package.miniz_oxide]
+opt-level = 3

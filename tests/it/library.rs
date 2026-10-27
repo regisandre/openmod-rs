@@ -3,16 +3,14 @@
 // Case tables are tuples on purpose: one row per case, read at a glance.
 #![allow(clippy::type_complexity)]
 
-use image::{ImageFormat, Rgb, RgbImage};
+use crate::common::png;
 use openmod::catalog;
 use openmod::config::{ConceptSpec, Config, DEFAULT_CONFIG, ModelSpec};
 use openmod::decision::Action;
 use openmod::engine::{CheckError, Engine, Report};
 use openmod::tools::Kind;
 use openmod::workflow::{CompiledWorkflow, WorkflowSpec};
-use qrcode::{Color, QrCode};
 use std::collections::BTreeMap;
-use std::io::Cursor;
 use std::path::Path;
 
 /// A server with no model file to download: the QR reader, a one-site adult
@@ -55,40 +53,6 @@ pii_phone = { review = 1.0 }
     )
     .unwrap();
     Engine::load(Config::load(&dir.join("openmod.toml")).unwrap(), None)
-}
-
-/// A photo-like background with, if given, a QR code of `payload` on it.
-fn png(payload: Option<&str>) -> Vec<u8> {
-    let (w, h) = (900, 700);
-    let mut img = RgbImage::from_fn(w, h, |x, y| {
-        Rgb([
-            (120 + x * 60 / w) as u8,
-            (90 + y * 80 / h) as u8,
-            (140 + (x + y) * 40 / (w + h)) as u8,
-        ])
-    });
-    if let Some(payload) = payload {
-        let code = QrCode::new(payload.as_bytes()).unwrap();
-        let (width, module) = (code.width() as u32, 6);
-        let colors = code.to_colors();
-        for y in 0..(width + 8) * module {
-            for x in 0..(width + 8) * module {
-                let (mx, my) = (x / module, y / module);
-                let inside = (4..width + 4).contains(&mx) && (4..width + 4).contains(&my);
-                let dark = inside && colors[((my - 4) * width + (mx - 4)) as usize] == Color::Dark;
-                let pixel = if dark {
-                    Rgb([20, 20, 30])
-                } else {
-                    Rgb([235, 230, 220])
-                };
-                img.put_pixel(400 + x, 250 + y, pixel);
-            }
-        }
-    }
-    let mut out = Vec::new();
-    img.write_to(&mut Cursor::new(&mut out), ImageFormat::Png)
-        .unwrap();
-    out
 }
 
 /// A report as JSON, without the one field that depends on the clock.
@@ -396,7 +360,7 @@ fn a_custom_category_needs_a_zero_shot_model_that_keeps_its_text_encoder() {
     );
     // (case, the models, what the problem says). The case of a model that is
     // ready but frees its text encoder needs the model files: see the
-    // ignored test of tests/zero_shot.rs.
+    // ignored test of tests/it/zero_shot.rs.
     let cases: Vec<(&str, String, &str)> = vec![
         (
             "no zero-shot model in the configuration",

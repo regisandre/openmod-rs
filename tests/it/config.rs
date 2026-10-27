@@ -425,7 +425,7 @@ fn a_second_opinion_without_its_first_pass_runs_on_every_text() {
 }
 
 #[test]
-fn every_category_of_the_default_config_has_its_own_title_and_message() {
+fn the_default_config_is_valid_ships_every_builtin_tool_and_words_every_category() {
     let config = parse(DEFAULT_CONFIG).unwrap();
     let catalog = openmod::catalog::Catalog::builtin();
     let categories = config
@@ -439,11 +439,6 @@ fn every_category_of_the_default_config_has_its_own_title_and_message() {
             "`{category}` falls back to the generic message"
         );
     }
-}
-
-#[test]
-fn the_default_config_is_valid_and_ships_every_builtin_tool() {
-    let config = parse(DEFAULT_CONFIG).unwrap();
     for tool in TOOLS {
         let entry = config.models.get(tool.id);
         assert!(

@@ -1,0 +1,36 @@
+# cargo-deny over the dependency graph: `cargo deny check` runs advisories
+# (the RustSec database, the one cargo-audit reads), licenses, bans and sources.
+
+[advisories]
+# Every advisory fails the check, unmaintained and unsound crates included.
+# An exception names its advisory id here, with why it does not apply.
+ignore = [
+  # A proc-macro of tokenizers: it runs at compile time only, and the
+  # advisory reports no vulnerability.
+  { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; compile time only, no vulnerability" },
+]
+
+[licenses]
+# Permissive licenses compatible with Apache-2.0 only: no AGPL, GPL or LGPL,
+# and nothing unknown.
+allow = [
+  "0BSD",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MIT",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
